@@ -266,8 +266,25 @@ track_artists_df = convert_json_col_to_dataframe_with_key(
 # Comment out the following line for personal uses
 # track_artists_df[name_str] = track_artists_df[name_str].apply(hash)
 
+# Variable setup
 id_str = "id"
 count_track_id_str = f"count_{track_id_str}"
+
+added_at_ym_str = added_at_str + "_ym"
+added_at_ymd_str = added_at_ym_str + "d"
+
+# Pull in the added_at field for each track
+track_artists_df_with_added_at = pd.merge(
+    track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
+)
+
+# Create fields for added_at formatted as YYYY-MM and YYYY-MM-DD
+track_artists_df_with_added_at[added_at_ym_str] = track_artists_df_with_added_at[
+    added_at_str
+].dt.strftime("%Y-%m")
+track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
+    added_at_str
+].dt.date
 
 # Use the DataFrame linking tracks to artists to get the number of tracks liked per artist.
 num_tracks_per_artist = (
@@ -282,128 +299,47 @@ num_tracks_per_artist = (
 # hash_str = "hash"
 # num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
 
+num_top_artists = 15
+artist_str = "Artist"
+num_liked_tracks_str = "Number of Liked Tracks"
+
 px_top_artists_by_track_count = px.bar(
-    num_tracks_per_artist.head(15).sort_values(count_track_id_str, ascending=True),
+    num_tracks_per_artist.head(num_top_artists).sort_values(
+        count_track_id_str, ascending=True
+    ),
     x=count_track_id_str,
     y=name_str,
     text_auto=True,
     orientation="h",
+    color_continuous_scale=px.colors.sequential.Sunset,
+    color=count_track_id_str,
+    labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
+    title=f"Top {num_top_artists} Artists by Liked Track Count",
 )
 px_top_artists_by_track_count.update_traces(
     textangle=0, textposition="outside", cliponaxis=False
 )
-st.plotly_chart(px_top_artists_by_track_count, use_container_width=True)
+px_top_artists_by_track_count.update_coloraxes(showscale=False)
+px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
 
-# display(
-#     num_tracks_per_artist[num_tracks_per_artist[count_track_id_str] >= 2][
-#         [name_str, count_track_id_str]
-#     ].head()
-# )
+col1, col2 = st.columns(2)
 
-# my_track_artists = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
+with col1:
+    st.plotly_chart(
+        px_top_artists_by_track_count,
+        use_container_width=True,
+        config={"displayModeBar": False},
+    )
 
-# display(my_track_artists.head())
-
-# # Variable setup
-# added_at_ym_str = added_at_str + "_ym"
-# added_at_ymd_str = added_at_ym_str + "d"
-
-# # Pull in the added_at field for each track
-# track_artists_df_with_added_at = pd.merge(
-#     track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
-# )
-
-# # Create fields for added_at formatted as YYYY-MM and YYYY-MM-DD
-# track_artists_df_with_added_at[added_at_ym_str] = track_artists_df_with_added_at[
-#     added_at_str
-# ].dt.strftime("%Y-%m")
-# track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
-#     added_at_str
-# ].dt.date
-
-# # Create a DataFrame of all YYYY-MM dates between the minimum added_at and maximum added_at
-# added_at_date_range_pd_series = track_artists_df_with_added_at[added_at_ymd_str]
-
-# added_at_date_range_df = (
-#     pd.date_range(
-#         start=added_at_date_range_pd_series.min(),
-#         end=added_at_date_range_pd_series.max(),
-#     )
-#     .strftime("%Y-%m")
-#     .drop_duplicates()
-#     .to_frame()
-#     .reset_index(drop=True)
-#     .rename(columns={0: added_at_ym_str})
-# )
-
-# # For each unique artist with tracks liked, create a DataFrame of all possible added_at YYYY-MM combinations
-# # with that artist's information, and bind the rows of all DataFrames together
-# unique_artists_df = (
-#     track_artists_df_with_added_at[[id_str, name_str]]
-#     .drop_duplicates()
-#     .reset_index(drop=True)
-# )
-
-# unique_artists_all_dates_list = list()
-
-# for i, df_row in unique_artists_df.iterrows():
-#     tmp_unique_artist_base = unique_artists_df.iloc[[i]].reset_index(drop=True)
-
-#     tmp_unique_artist = pd.concat(
-#         [added_at_date_range_df, tmp_unique_artist_base], axis=1
-#     )
-
-#     for curr_col in tmp_unique_artist_base.columns:
-#         tmp_unique_artist[curr_col].fillna(df_row[curr_col], inplace=True)
-
-#     unique_artists_all_dates_list.append(tmp_unique_artist)
-
-# unique_artists_all_dates_df = pd.concat(unique_artists_all_dates_list).reset_index(
-#     drop=True
-# )
-
-# # Calculate the number of liked songs per artist per YYYY-MM
-# artist_month_indexes = [id_str, name_str, added_at_ym_str]
-
-# num_tracks_per_artist_month = (
-#     track_artists_df_with_added_at.groupby(artist_month_indexes)[track_id_str]
-#     .count()
-#     .to_frame()
-#     .sort_values(added_at_ym_str)
-#     .reset_index()
-#     .rename(columns={track_id_str: count_track_id_str})
-# )
-
-# # Outer merge with all possible liked song dates, and fill NAs with 0.
-# num_tracks_per_artist_month = pd.merge(
-#     num_tracks_per_artist_month,
-#     unique_artists_all_dates_df,
-#     on=artist_month_indexes,
-#     how="outer",
-#     sort=True,
-# ).fillna(0)
-
-# display(num_tracks_per_artist_month.head())
-
-# # Create a column that calculates the running sum of liked songs by ascending date for each artist.
-# # Data was sorted in the previous code block
-# runningsum_str = "runningsum"
-
-# num_tracks_per_artist_month[runningsum_str] = num_tracks_per_artist_month.groupby(
-#     [id_str]
-# )[count_track_id_str].cumsum()
-
-# display(num_tracks_per_artist_month.head())
-
-# # Pivot the data
-# num_tracks_per_artist_month_pivot = num_tracks_per_artist_month.pivot_table(
-#     values=runningsum_str,
-#     index=[id_str, name_str],
-#     columns=added_at_ym_str,
-#     fill_value=0,
-# )
-
-# display(num_tracks_per_artist_month_pivot.head())
+with col2:
+    st.markdown("**All Artists and Liked Track Counts**")
+    st.dataframe(
+        num_tracks_per_artist[[name_str, count_track_id_str]].rename(
+            columns={name_str: artist_str, count_track_id_str: num_liked_tracks_str}
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 # my_long_term_top_tracks = spotify_get_all_results(
 #     access_token,
@@ -430,7 +366,7 @@ st.plotly_chart(px_top_artists_by_track_count, use_container_width=True)
 
 # display(my_followed_artists.head())
 
-# my_left = my_track_artists
+# my_left = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
 # my_right = my_followed_artists
 
 # my_followed_and_liked_artists_df = pd.merge(
