@@ -1,0 +1,476 @@
+import json
+import requests
+import jmespath
+import base64
+import yaml
+
+import ipywidgets as widgets
+import numpy as np
+import matplotlib.pyplot as plt
+import plotly.express as px
+import pandas as pd
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+import time
+import streamlit as st
+
+pd.set_option("display.max_columns", None)
+pd.set_option("display.max_rows", 600)
+
+
+# Helper function
+# A field of JSON from a row of data is converted to its own dataframe
+# In addtion, the unique id columns from its source are appended on as the first columns.
+# Args:
+# pd_series is a row of data from a pandas DataFrame.
+# id_names is either a string of the id column's name, or a list of strings of the id columns' names.
+# json_col_to_parse is the name of the JSON column to convert to a DataFrame.
+def assign_id_and_parse(pd_series, id_names, json_col_to_parse):
+    # Convert to a list if not one already
+    id_names = id_names if isinstance(id_names, list) else [id_names]
+
+    # Convert the nested lists of dictionaries to a DataFrame
+    retVal = pd.DataFrame(pd_series[json_col_to_parse])
+
+    # Insert the current ID as the first column, going backwards through the list.
+    for curr_id_name in id_names[::-1]:
+        retVal.insert(0, curr_id_name, pd_series[curr_id_name])
+
+    return retVal
+
+
+# This function takes a DataFrame and parses a column, for which each row is JSON.
+# Each JSON value is converted to its own DataFrame.
+# In addtion, for each new DataFrame, the unique id columns from its source are appended on as the first columns.
+# Finally, the resultant DataFrames are unioned together and returned.
+# Args:
+# df is the DataFrame to parse
+# id_col_names is either a string of the id column's name, or a list of strings of the id columns' names.
+# json_col_name is the name of the JSON column to convert to a DataFrame.
+def convert_json_col_to_dataframe_with_key(df, id_col_names, json_col_name):
+    retVal_list = list()
+
+    # Go through all rows, parse the JSON, assign the unique ID(s). Union the results.
+    for i, df_row in df.iterrows():
+        retVal_list.append(assign_id_and_parse(df_row, id_col_names, json_col_name))
+
+    return pd.concat(retVal_list).reset_index(drop=True)
+
+
+# Convenience function to write a pandas DataFrame into the data_out folder of the project setup.
+# Args:
+# pd_df is the pandas DataFrame
+# filename is the name for the new file to write
+def spotify_write_df_to_data_out_csv(pd_df, filename):
+    pd_df.to_csv(f"data_out/{filename}.csv", index=False)
+
+
+# Convenience function to call the Spotify API
+# Args:
+# access_token: the token retrieved through Oauth 2.0
+# endpoint: the Spotify endpoint to hit
+# content_type: a string of the value to pass to the API Content-Type header
+# query: a dictionary of key value pairs to send via the API. Defaulted to an empty dictionary if not needed.
+# max_parse_level: passed to pd.normalize and controls how JSON is flattened. The default, 0, ensures max flattening.
+# base_obj: a string to pass if the returned JSON is wrapped in a tag. Used to filter out the tag for parsing efficiency.
+def spotify_get_all_results(
+    access_token, endpoint, content_type, query={}, max_parse_level=0, base_obj=None
+):
+    # Header setup
+    api_call_headers = {
+        "Authorization": "Bearer " + access_token,
+        "Content-Type": content_type,
+    }
+
+    # Variable setup for loop to get all results
+    next_api_url = endpoint
+
+    curr_page_num = 0
+    first_call = True
+    retVal_list = list()
+
+    # Loop through the API-provided next endpoints until no more exist. Union the results.
+    while next_api_url is not None:
+        # HTTP GET
+        # raise_for_status() will stop execution on this fatal error.
+        api_request = requests.get(
+            next_api_url, headers=api_call_headers, params=query if first_call else {}
+        )
+        api_request.raise_for_status()
+
+        # Get the repsonse in JSON
+        api_request_json = api_request.json()
+
+        # Filter out the base_obj if it exists
+        if base_obj is not None:
+            # Too simple for JMESPath...
+            # TODO convert to JMESPath if more complex use cases arise
+            api_request_json = api_request_json[base_obj]
+
+        # If the first call, determine how many pages of data the API will have to retrieve.
+        # Use this calculation to create a progress bar to display.
+        if first_call:
+            num_pages = int(
+                np.ceil(api_request_json["total"] / api_request_json["limit"])
+            )
+
+            first_call = False
+
+            progress_bar = st.progress(curr_page_num, text="Loading...")
+
+        # Get the next endpoint to call, and convert the current JSON response to a DataFrame.
+        next_api_url = api_request_json["next"]
+
+        retVal_list.append(
+            pd.json_normalize(api_request_json["items"], max_level=max_parse_level)
+        )
+
+        curr_page_num += 1
+
+        # Update the progress bar
+        progress_bar.progress(
+            curr_page_num / num_pages,
+            text=f"Loaded Page: {curr_page_num} of {num_pages}",
+        )
+
+    # When processing is complete, stop showing the progress bar
+    progress_bar.empty()
+    st.balloons()
+
+    # Return the unioned result
+    return pd.concat(retVal_list).reset_index(drop=True)
+
+
+# Set the default layout for the frontend
+st.set_page_config(layout="wide")
+
+spotify_accounts_endpoint = "https://accounts.spotify.com/"
+spotify_api_endpoint = "https://api.spotify.com/v1/"
+
+with st.spinner("Authorizing..."):
+    # Install the web driver
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+    # Get the app and user credentials from the YAML file
+    # Note: this application is meant for local use only.
+    # Never publish or give out your credentials, or leave them unencrypted in an untrusted location.
+    with open("config/config.yml", "r") as file:
+        config_contents = yaml.safe_load(file)
+
+    config_contents_creds = config_contents["creds"]
+
+    client_id = config_contents_creds["client_id"]
+    client_secret = config_contents_creds["client_secret"]
+    scopes = "user-read-private user-read-email playlist-read-private user-follow-read user-top-read user-read-recently-played user-library-read"
+
+    redirect_uri = config_contents["redirect_uri"]
+
+    oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
+
+    # Load the page and enter the username and password
+    driver.get(oath_token_url)
+
+    username_input = driver.find_element("id", "login-username")
+    username_input.send_keys(config_contents_creds["username"])
+
+    password_input = driver.find_element("id", "login-password")
+    password_input.send_keys(config_contents_creds["password"])
+
+    login_button = driver.find_element("id", "login-button")
+    login_button.click()
+
+    # If needed, click the proper "Accept" button to proceed to the next page
+    if driver.current_url.startswith(f"{spotify_accounts_endpoint}en/authorize?"):
+        agree_button = driver.find_element(
+            "xpath", '//button[@data-testid="auth-accept"]'
+        )
+        agree_button.click()
+
+    # Sleep to ensure the page loads
+    time.sleep(2)
+
+    # Finally, obtain the oauth initial token
+    oauth_initial_token = driver.current_url.replace(f"{redirect_uri}/?code=", "")
+
+    # Quit out of selenium-based items
+    driver.close()
+    driver.quit()
+
+    # Set up for the API call to retrieve an access token
+    base64_encoding = "ascii"
+    content_type_dictionary = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    # Headers with Base64 auth encoding
+    get_bearer_token_headers = {
+        "Authorization": "Basic "
+        + base64.b64encode(
+            f"{client_id}:{client_secret}".encode(base64_encoding)
+        ).decode(base64_encoding)
+    } | content_type_dictionary
+
+    # Payload
+    get_bearer_token_payload = {
+        "grant_type": "authorization_code",
+        "code": oauth_initial_token,
+        "redirect_uri": redirect_uri,
+    }
+
+    # HTTP POST
+    get_bearer_token_response = requests.post(
+        f"{spotify_accounts_endpoint}api/token",
+        headers=get_bearer_token_headers,
+        data=get_bearer_token_payload,
+    )
+
+    # Crash on error (no automated data pipelines to disrupt here...)
+    get_bearer_token_response.raise_for_status()
+
+    # Read the resulting JSON and retrieve your access token!
+    get_bearer_token_response_json = get_bearer_token_response.json()
+    access_token = get_bearer_token_response_json["access_token"]
+
+track_str = "track"
+track_id_str = f"{track_str}_id"
+
+added_at_str = "added_at"
+name_str = "name"
+
+# API call happens here
+my_tracks = spotify_get_all_results(
+    access_token,
+    f"{spotify_api_endpoint}me/tracks",
+    "application/x-www-form-urlencoded",
+    max_parse_level=1,
+)
+
+# Header and column cleanup
+my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
+my_tracks.rename(columns={"id": track_id_str}, inplace=True)
+
+my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
+
+# Comment out the following line for personal uses
+# my_tracks[name_str] = my_tracks[name_str].apply(hash)
+
+# st.dataframe(my_tracks)
+
+artists_str = "artists"
+
+track_artists_df = convert_json_col_to_dataframe_with_key(
+    my_tracks, track_id_str, artists_str
+)
+
+# Comment out the following line for personal uses
+# track_artists_df[name_str] = track_artists_df[name_str].apply(hash)
+
+id_str = "id"
+count_track_id_str = f"count_{track_id_str}"
+
+# Use the DataFrame linking tracks to artists to get the number of tracks liked per artist.
+num_tracks_per_artist = (
+    track_artists_df.groupby([id_str, name_str])[track_id_str]
+    .count()
+    .to_frame()
+    .sort_values(track_id_str, ascending=False)
+    .reset_index()
+    .rename(columns={track_id_str: count_track_id_str})
+)
+
+# hash_str = "hash"
+# num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
+
+px_top_artists_by_track_count = px.bar(
+    num_tracks_per_artist.head(15).sort_values(count_track_id_str, ascending=True),
+    x=count_track_id_str,
+    y=name_str,
+    text_auto=True,
+    orientation="h",
+)
+px_top_artists_by_track_count.update_traces(
+    textangle=0, textposition="outside", cliponaxis=False
+)
+st.plotly_chart(px_top_artists_by_track_count, use_container_width=True)
+
+# display(
+#     num_tracks_per_artist[num_tracks_per_artist[count_track_id_str] >= 2][
+#         [name_str, count_track_id_str]
+#     ].head()
+# )
+
+# my_track_artists = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
+
+# display(my_track_artists.head())
+
+# # Variable setup
+# added_at_ym_str = added_at_str + "_ym"
+# added_at_ymd_str = added_at_ym_str + "d"
+
+# # Pull in the added_at field for each track
+# track_artists_df_with_added_at = pd.merge(
+#     track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
+# )
+
+# # Create fields for added_at formatted as YYYY-MM and YYYY-MM-DD
+# track_artists_df_with_added_at[added_at_ym_str] = track_artists_df_with_added_at[
+#     added_at_str
+# ].dt.strftime("%Y-%m")
+# track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
+#     added_at_str
+# ].dt.date
+
+# # Create a DataFrame of all YYYY-MM dates between the minimum added_at and maximum added_at
+# added_at_date_range_pd_series = track_artists_df_with_added_at[added_at_ymd_str]
+
+# added_at_date_range_df = (
+#     pd.date_range(
+#         start=added_at_date_range_pd_series.min(),
+#         end=added_at_date_range_pd_series.max(),
+#     )
+#     .strftime("%Y-%m")
+#     .drop_duplicates()
+#     .to_frame()
+#     .reset_index(drop=True)
+#     .rename(columns={0: added_at_ym_str})
+# )
+
+# # For each unique artist with tracks liked, create a DataFrame of all possible added_at YYYY-MM combinations
+# # with that artist's information, and bind the rows of all DataFrames together
+# unique_artists_df = (
+#     track_artists_df_with_added_at[[id_str, name_str]]
+#     .drop_duplicates()
+#     .reset_index(drop=True)
+# )
+
+# unique_artists_all_dates_list = list()
+
+# for i, df_row in unique_artists_df.iterrows():
+#     tmp_unique_artist_base = unique_artists_df.iloc[[i]].reset_index(drop=True)
+
+#     tmp_unique_artist = pd.concat(
+#         [added_at_date_range_df, tmp_unique_artist_base], axis=1
+#     )
+
+#     for curr_col in tmp_unique_artist_base.columns:
+#         tmp_unique_artist[curr_col].fillna(df_row[curr_col], inplace=True)
+
+#     unique_artists_all_dates_list.append(tmp_unique_artist)
+
+# unique_artists_all_dates_df = pd.concat(unique_artists_all_dates_list).reset_index(
+#     drop=True
+# )
+
+# # Calculate the number of liked songs per artist per YYYY-MM
+# artist_month_indexes = [id_str, name_str, added_at_ym_str]
+
+# num_tracks_per_artist_month = (
+#     track_artists_df_with_added_at.groupby(artist_month_indexes)[track_id_str]
+#     .count()
+#     .to_frame()
+#     .sort_values(added_at_ym_str)
+#     .reset_index()
+#     .rename(columns={track_id_str: count_track_id_str})
+# )
+
+# # Outer merge with all possible liked song dates, and fill NAs with 0.
+# num_tracks_per_artist_month = pd.merge(
+#     num_tracks_per_artist_month,
+#     unique_artists_all_dates_df,
+#     on=artist_month_indexes,
+#     how="outer",
+#     sort=True,
+# ).fillna(0)
+
+# display(num_tracks_per_artist_month.head())
+
+# # Create a column that calculates the running sum of liked songs by ascending date for each artist.
+# # Data was sorted in the previous code block
+# runningsum_str = "runningsum"
+
+# num_tracks_per_artist_month[runningsum_str] = num_tracks_per_artist_month.groupby(
+#     [id_str]
+# )[count_track_id_str].cumsum()
+
+# display(num_tracks_per_artist_month.head())
+
+# # Pivot the data
+# num_tracks_per_artist_month_pivot = num_tracks_per_artist_month.pivot_table(
+#     values=runningsum_str,
+#     index=[id_str, name_str],
+#     columns=added_at_ym_str,
+#     fill_value=0,
+# )
+
+# display(num_tracks_per_artist_month_pivot.head())
+
+# my_long_term_top_tracks = spotify_get_all_results(
+#     access_token,
+#     f"{spotify_api_endpoint}me/top/tracks",
+#     "application/json",
+#     query={"time_range": "long_term"},
+# )
+
+# # Comment out the following line for personal uses
+# my_long_term_top_tracks[name_str] = my_long_term_top_tracks[name_str].apply(hash)
+
+# display(my_long_term_top_tracks.head())
+
+# my_followed_artists = spotify_get_all_results(
+#     access_token,
+#     f"{spotify_api_endpoint}me/following",
+#     "application/json",
+#     query={"type": "artist"},
+#     base_obj="artists",
+# )
+
+# # Comment out the following line for personal uses
+# # my_followed_artists[name_str] = my_followed_artists[name_str].apply(hash)
+
+# display(my_followed_artists.head())
+
+# my_left = my_track_artists
+# my_right = my_followed_artists
+
+# my_followed_and_liked_artists_df = pd.merge(
+#     my_left, my_right, on=id_str, how="inner", suffixes=("", "_y")
+# )[my_left.columns]
+
+# display(my_followed_and_liked_artists_df.head())
+# print(my_followed_and_liked_artists_df.shape)
+
+# # Create Sets
+# my_track_artists_ids = set(my_left[id_str])
+# my_followed_artists_ids = set(my_right[id_str])
+# my_followed_and_liked_artists_ids = set(my_followed_and_liked_artists_df[id_str])
+
+# # Use Set operations
+# my_unfollowed_track_artists_ids = (
+#     my_track_artists_ids - my_followed_and_liked_artists_ids
+# )
+# my_followed_and_nonliked_artists_ids = (
+#     my_followed_artists_ids - my_followed_and_liked_artists_ids
+# )
+
+# # TODO handle when my_followed_and_nonliked_artists_ids is non-empty
+
+# # Inspect data
+# my_unfollowed_track_artists_df = my_left[
+#     my_left[id_str].isin(my_unfollowed_track_artists_ids)
+# ]
+
+# my_top_unfollowed_artists_indices = (
+#     my_unfollowed_track_artists_df[count_track_id_str] > 2
+# )
+
+# my_top_unfollowed_artists_df = my_unfollowed_track_artists_df[
+#     my_top_unfollowed_artists_indices
+# ].reset_index(drop=True)
+
+# my_top_unfollowed_artists_df[hash_str] = my_top_unfollowed_artists_df[name_str].apply(
+#     hash
+# )
+
+# display(my_top_unfollowed_artists_df[[hash_str, count_track_id_str]].head())
+# print(my_top_unfollowed_artists_df.shape)

@@ -1,0 +1,7 @@
+creds:
+  client_id:      ''
+  client_secret:  ''
+  username:       ''
+  password:       ''
+
+redirect_uri: 'http://127.0.0.1:8080'
