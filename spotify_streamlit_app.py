@@ -270,30 +270,31 @@ track_artists_df = convert_json_col_to_dataframe_with_key(
 id_str = "id"
 count_track_id_str = f"count_{track_id_str}"
 
-added_at_ym_str = added_at_str + "_ym"
-added_at_ymd_str = added_at_ym_str + "d"
+added_at_ymd_str = added_at_str + "_ymd"
+max_added_at_ymd_str = f"max_{added_at_ymd_str}"
 
 # Pull in the added_at field for each track
 track_artists_df_with_added_at = pd.merge(
     track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
 )
 
-# Create fields for added_at formatted as YYYY-MM and YYYY-MM-DD
-track_artists_df_with_added_at[added_at_ym_str] = track_artists_df_with_added_at[
-    added_at_str
-].dt.strftime("%Y-%m")
+# Create field for added_at formatted as YYYY-MM-DD
 track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
     added_at_str
 ].dt.date
 
 # Use the DataFrame linking tracks to artists to get the number of tracks liked per artist.
 num_tracks_per_artist = (
-    track_artists_df.groupby([id_str, name_str])[track_id_str]
-    .count()
-    .to_frame()
+    track_artists_df_with_added_at.groupby([id_str, name_str])
+    .agg({track_id_str: "count", added_at_ymd_str: "max"})
     .sort_values(track_id_str, ascending=False)
     .reset_index()
-    .rename(columns={track_id_str: count_track_id_str})
+    .rename(
+        columns={
+            track_id_str: count_track_id_str,
+            added_at_ymd_str: max_added_at_ymd_str,
+        }
+    )
 )
 
 # hash_str = "hash"
@@ -302,6 +303,7 @@ num_tracks_per_artist = (
 num_top_artists = 15
 artist_str = "Artist"
 num_liked_tracks_str = "Number of Liked Tracks"
+last_liked_date_str = "Last Liked Date"
 
 px_top_artists_by_track_count = px.bar(
     num_tracks_per_artist.head(num_top_artists).sort_values(
@@ -334,8 +336,14 @@ with col1:
 with col2:
     st.markdown("**All Artists and Liked Track Counts**")
     st.dataframe(
-        num_tracks_per_artist[[name_str, count_track_id_str]].rename(
-            columns={name_str: artist_str, count_track_id_str: num_liked_tracks_str}
+        num_tracks_per_artist[
+            [name_str, count_track_id_str, max_added_at_ymd_str]
+        ].rename(
+            columns={
+                name_str: artist_str,
+                count_track_id_str: num_liked_tracks_str,
+                max_added_at_ymd_str: last_liked_date_str,
+            }
         ),
         use_container_width=True,
         hide_index=True,
