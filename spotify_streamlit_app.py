@@ -245,6 +245,21 @@ track_id_str = f"{track_str}_id"
 
 added_at_str = "added_at"
 name_str = "name"
+id_str = "id"
+artists_str = "artists"
+
+count_track_id_str = f"count_{track_id_str}"
+
+added_at_ymd_str = added_at_str + "_ymd"
+max_added_at_ymd_str = f"max_{added_at_ymd_str}"
+
+num_top_artists = 15
+artist_str = "Artist"
+num_liked_tracks_str = "Number of Liked Tracks"
+last_liked_date_str = "Last Liked Date"
+
+track_name_str = f"{track_str}_{name_str}"
+artist_name_str = f"{artist_str.lower()}_{name_str}"
 
 # API call happens here
 my_tracks = spotify_get_all_results(
@@ -256,7 +271,6 @@ my_tracks = spotify_get_all_results(
 )
 
 # Header and column cleanup
-id_str = "id"
 my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
 my_tracks.rename(columns={id_str: track_id_str}, inplace=True)
 
@@ -265,19 +279,12 @@ my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 # Comment out the following line for personal uses
 # my_tracks[name_str] = my_tracks[name_str].apply(hash)
 
-artists_str = "artists"
 track_artists_df = convert_json_col_to_dataframe_with_key(
     my_tracks, track_id_str, artists_str
 )
 
 # Comment out the following line for personal uses
 # track_artists_df[name_str] = track_artists_df[name_str].apply(hash)
-
-# Variable setup
-count_track_id_str = f"count_{track_id_str}"
-
-added_at_ymd_str = added_at_str + "_ymd"
-max_added_at_ymd_str = f"max_{added_at_ymd_str}"
 
 # Pull in the added_at field for each track
 track_artists_df_with_added_at = pd.merge(
@@ -305,11 +312,6 @@ num_tracks_per_artist = (
 
 # hash_str = "hash"
 # num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
-
-num_top_artists = 15
-artist_str = "Artist"
-num_liked_tracks_str = "Number of Liked Tracks"
-last_liked_date_str = "Last Liked Date"
 
 my_px_color_theme = px.colors.sequential.Sunset
 
@@ -359,24 +361,33 @@ with topcol2:
         hide_index=True,
     )
 
-track_name_str = f"{track_str}_{name_str}"
-artist_name_str = f"{artist_str.lower()}_{name_str}"
-
-my_long_term_top_tracks = spotify_get_all_results(
+my_top_tracks = spotify_get_all_results(
     access_token,
     f"{spotify_api_endpoint}me/top/tracks",
     "application/json",
     query={"time_range": "long_term"},
 ).rename(columns={id_str: track_id_str, name_str: track_name_str})
 
-track_rank_str = f"{track_str}_rank"
-my_long_term_top_tracks[track_rank_str] = range(1, len(my_long_term_top_tracks) + 1)
+album_str = "album"
+url_str = "url"
+my_top_tracks[album_str] = my_top_tracks[album_str].apply(lambda x: [x])
+my_top_tracks_album_images = convert_json_col_to_dataframe_with_key(
+    convert_json_col_to_dataframe_with_key(my_top_tracks, track_id_str, album_str),
+    track_id_str,
+    "images",
+)
+my_top_tracks_album_images_64 = my_top_tracks_album_images[
+    my_top_tracks_album_images["height"] == 64
+][[track_id_str, url_str]].reset_index()[[track_id_str, url_str]]
 
-my_long_term_top_tracks_with_artist = (
+track_rank_str = f"{track_str}_rank"
+my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
+
+my_top_tracks_with_artist = (
     pd.merge(
-        my_long_term_top_tracks[[track_id_str, track_rank_str, track_name_str]],
+        my_top_tracks[[track_id_str, track_rank_str, track_name_str]],
         convert_json_col_to_dataframe_with_key(
-            my_long_term_top_tracks, track_id_str, artists_str
+            my_top_tracks, track_id_str, artists_str
         ),
         on=track_id_str,
     )
@@ -384,15 +395,29 @@ my_long_term_top_tracks_with_artist = (
     .groupby([track_id_str, track_rank_str, track_name_str])
     .agg({artist_name_str: "; ".join})
     .sort_values(track_rank_str, ascending=True)
-    .reset_index()[[track_rank_str, artist_name_str, track_name_str]]
+    .reset_index()[[track_rank_str, track_id_str, artist_name_str, track_name_str]]
 )
+
+my_top_tracks_with_artist_and_album_img = pd.merge(
+    my_top_tracks_with_artist, my_top_tracks_album_images_64, on=track_id_str
+)
+
+toptrackscol1, toptrackscol2, toptrackscol3 = st.columns(3)
+
+with toptrackscol1:
+    for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
+        with st.container():
+            botcol1, botcol2 = st.columns([1, 1])
+            botcol1.image(df_row[url_str])
+            # botcol2.write(' ')
+            botcol2.write(df_row[track_name_str])
+            # botcol2.write(df_row[artist_name_str])
+            # botcol2.write(' ')
 
 # # Comment out the following line for personal uses
-# my_long_term_top_tracks[name_str] = my_long_term_top_tracks[name_str].apply(hash)
+# my_top_tracks[name_str] = my_top_tracks[name_str].apply(hash)
 
-st.dataframe(
-    my_long_term_top_tracks_with_artist, use_container_width=True, hide_index=True
-)
+# st.dataframe(my_top_tracks_with_artist, use_container_width=True, hide_index=True)
 
 # my_followed_artists = spotify_get_all_results(
 #     access_token,
