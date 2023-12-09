@@ -260,106 +260,111 @@ last_liked_date_str = "Last Liked Date"
 
 track_name_str = f"{track_str}_{name_str}"
 artist_name_str = f"{artist_str.lower()}_{name_str}"
+primary_artist_name_str = f"primary_{artist_name_str}"
 
-# API call happens here
-my_tracks = spotify_get_all_results(
-    access_token,
-    f"{spotify_api_endpoint}me/tracks",
-    "application/x-www-form-urlencoded",
-    max_parse_level=1,
-    balloons=True,
-)
+album_str = "album"
+url_str = "url"
+track_rank_str = f"{track_str}_rank"
 
-# Header and column cleanup
-my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
-my_tracks.rename(columns={id_str: track_id_str}, inplace=True)
+# # API call happens here
+# my_tracks = spotify_get_all_results(
+#     access_token,
+#     f"{spotify_api_endpoint}me/tracks",
+#     "application/x-www-form-urlencoded",
+#     max_parse_level=1,
+#     balloons=True,
+# )
 
-my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
+# # Header and column cleanup
+# my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
+# my_tracks.rename(columns={id_str: track_id_str}, inplace=True)
 
-# Comment out the following line for personal uses
-# my_tracks[name_str] = my_tracks[name_str].apply(hash)
+# my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 
-track_artists_df = convert_json_col_to_dataframe_with_key(
-    my_tracks, track_id_str, artists_str
-)
+# # Comment out the following line for personal uses
+# # my_tracks[name_str] = my_tracks[name_str].apply(hash)
 
-# Comment out the following line for personal uses
-# track_artists_df[name_str] = track_artists_df[name_str].apply(hash)
+# track_artists_df = convert_json_col_to_dataframe_with_key(
+#     my_tracks, track_id_str, artists_str
+# )
 
-# Pull in the added_at field for each track
-track_artists_df_with_added_at = pd.merge(
-    track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
-)
+# # Comment out the following line for personal uses
+# # track_artists_df[name_str] = track_artists_df[name_str].apply(hash)
 
-# Create field for added_at formatted as YYYY-MM-DD
-track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
-    added_at_str
-].dt.date
+# # Pull in the added_at field for each track
+# track_artists_df_with_added_at = pd.merge(
+#     track_artists_df, my_tracks[[track_id_str, added_at_str]], on=track_id_str
+# )
 
-# Use the DataFrame linking tracks to artists to get the number of tracks liked per artist.
-num_tracks_per_artist = (
-    track_artists_df_with_added_at.groupby([id_str, name_str])
-    .agg({track_id_str: "count", added_at_ymd_str: "max"})
-    .sort_values(track_id_str, ascending=False)
-    .reset_index()
-    .rename(
-        columns={
-            track_id_str: count_track_id_str,
-            added_at_ymd_str: max_added_at_ymd_str,
-        }
-    )
-)
+# # Create field for added_at formatted as YYYY-MM-DD
+# track_artists_df_with_added_at[added_at_ymd_str] = track_artists_df_with_added_at[
+#     added_at_str
+# ].dt.date
 
-# hash_str = "hash"
-# num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
+# # Use the DataFrame linking tracks to artists to get the number of tracks liked per artist.
+# num_tracks_per_artist = (
+#     track_artists_df_with_added_at.groupby([id_str, name_str])
+#     .agg({track_id_str: "count", added_at_ymd_str: "max"})
+#     .sort_values(track_id_str, ascending=False)
+#     .reset_index()
+#     .rename(
+#         columns={
+#             track_id_str: count_track_id_str,
+#             added_at_ymd_str: max_added_at_ymd_str,
+#         }
+#     )
+# )
 
-my_px_color_theme = px.colors.sequential.Sunset
+# # hash_str = "hash"
+# # num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
 
-px_top_artists_by_track_count = px.bar(
-    num_tracks_per_artist.head(num_top_artists).sort_values(
-        count_track_id_str, ascending=True
-    ),
-    x=count_track_id_str,
-    y=name_str,
-    text_auto=True,
-    orientation="h",
-    color_continuous_scale=my_px_color_theme,
-    color=count_track_id_str,
-    labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
-    title=f"Top {num_top_artists} Artists by Liked Track Count",
-)
-px_top_artists_by_track_count.update_traces(
-    textangle=0, textposition="outside", cliponaxis=False
-)
-px_top_artists_by_track_count.update_coloraxes(showscale=False)
-px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
+# my_px_color_theme = px.colors.sequential.Sunset
 
-px_displaybarconfig = {"displayModeBar": False}
+# px_top_artists_by_track_count = px.bar(
+#     num_tracks_per_artist.head(num_top_artists).sort_values(
+#         count_track_id_str, ascending=True
+#     ),
+#     x=count_track_id_str,
+#     y=name_str,
+#     text_auto=True,
+#     orientation="h",
+#     color_continuous_scale=my_px_color_theme,
+#     color=count_track_id_str,
+#     labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
+#     title=f"Top {num_top_artists} Artists by Liked Track Count",
+# )
+# px_top_artists_by_track_count.update_traces(
+#     textangle=0, textposition="outside", cliponaxis=False
+# )
+# px_top_artists_by_track_count.update_coloraxes(showscale=False)
+# px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
 
-topcol1, topcol2 = st.columns(2)
+# px_displaybarconfig = {"displayModeBar": False}
 
-with topcol1:
-    st.plotly_chart(
-        px_top_artists_by_track_count,
-        use_container_width=True,
-        config=px_displaybarconfig,
-    )
+# topcol1, topcol2 = st.columns(2)
 
-with topcol2:
-    st.markdown("**All Artists and Liked Track Counts**")
-    st.dataframe(
-        num_tracks_per_artist[
-            [name_str, count_track_id_str, max_added_at_ymd_str]
-        ].rename(
-            columns={
-                name_str: artist_str,
-                count_track_id_str: num_liked_tracks_str,
-                max_added_at_ymd_str: last_liked_date_str,
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-    )
+# with topcol1:
+#     st.plotly_chart(
+#         px_top_artists_by_track_count,
+#         use_container_width=True,
+#         config=px_displaybarconfig,
+#     )
+
+# with topcol2:
+#     st.markdown("**All Artists and Liked Track Counts**")
+#     st.dataframe(
+#         num_tracks_per_artist[
+#             [name_str, count_track_id_str, max_added_at_ymd_str]
+#         ].rename(
+#             columns={
+#                 name_str: artist_str,
+#                 count_track_id_str: num_liked_tracks_str,
+#                 max_added_at_ymd_str: last_liked_date_str,
+#             }
+#         ),
+#         use_container_width=True,
+#         hide_index=True,
+#     )
 
 my_top_tracks = spotify_get_all_results(
     access_token,
@@ -368,19 +373,13 @@ my_top_tracks = spotify_get_all_results(
     query={"time_range": "long_term"},
 ).rename(columns={id_str: track_id_str, name_str: track_name_str})
 
-album_str = "album"
-url_str = "url"
 my_top_tracks[album_str] = my_top_tracks[album_str].apply(lambda x: [x])
 my_top_tracks_album_images = convert_json_col_to_dataframe_with_key(
     convert_json_col_to_dataframe_with_key(my_top_tracks, track_id_str, album_str),
     track_id_str,
     "images",
 )
-my_top_tracks_album_images_64 = my_top_tracks_album_images[
-    my_top_tracks_album_images["height"] == 64
-][[track_id_str, url_str]].reset_index()[[track_id_str, url_str]]
 
-track_rank_str = f"{track_str}_rank"
 my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
 
 my_top_tracks_with_artist = (
@@ -399,25 +398,98 @@ my_top_tracks_with_artist = (
 )
 
 my_top_tracks_with_artist_and_album_img = pd.merge(
-    my_top_tracks_with_artist, my_top_tracks_album_images_64, on=track_id_str
+    my_top_tracks_with_artist,
+    my_top_tracks_album_images[my_top_tracks_album_images["height"] == 300][
+        [track_id_str, url_str]
+    ].reset_index()[[track_id_str, url_str]],
+    on=track_id_str,
 )
 
-toptrackscol1, toptrackscol2, toptrackscol3 = st.columns(3)
+my_top_tracks_with_artist_and_album_img[
+    primary_artist_name_str
+] = my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
+    ";.+", "", regex=True
+)
 
-with toptrackscol1:
-    for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
-        with st.container():
-            botcol1, botcol2 = st.columns([1, 1])
-            botcol1.image(df_row[url_str])
-            # botcol2.write(' ')
-            botcol2.write(df_row[track_name_str])
-            # botcol2.write(df_row[artist_name_str])
-            # botcol2.write(' ')
+html_style_code = """
+<style>
+    body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+    }
+
+    .container {
+        display: flex;
+        align-items: center;
+    }
+
+    .number-container {
+        #margin-top: 15px;
+        margin-right: 20px;
+        text-align: center;
+        font-size: 24px;
+    }
+
+    .image-container {
+        margin-right: 20px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+
+    .image-container img {
+        width: 100px;
+        height: auto;
+        display: block;
+    }
+
+    .text-container {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .text-container p {
+        margin: 0;
+    }
+
+    p {
+        color: grey;
+    }
+</style>"""
+
+for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
+    html_div_code = f"""
+<div class="container">
+    <div class="number-container">
+        <b>{f"{df_row[track_rank_str]:02d}"}</b>
+    </div>
+    <div class="image-container">
+        <img src="{df_row[url_str]}" alt="Image">
+    </div>
+    <div class="text-container">
+        <strong>{df_row[track_name_str]}</strong>
+        <p>{df_row[primary_artist_name_str]}</p>
+    </div>
+</div>"""
+
+    st.markdown(html_style_code + "\n" + html_div_code, unsafe_allow_html=True)
+
+st.dataframe(
+    my_top_tracks_with_artist_and_album_img,
+    column_config={url_str: st.column_config.ImageColumn()},
+    use_container_width=True,
+    hide_index=True,
+)
+
+# toptrackscol1, toptrackscol2, toptrackscol3 = st.columns(3)
+
+# with toptrackscol1:
 
 # # Comment out the following line for personal uses
 # my_top_tracks[name_str] = my_top_tracks[name_str].apply(hash)
-
-# st.dataframe(my_top_tracks_with_artist, use_container_width=True, hide_index=True)
 
 # my_followed_artists = spotify_get_all_results(
 #     access_token,
