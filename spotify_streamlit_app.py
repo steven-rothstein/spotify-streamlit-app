@@ -267,6 +267,10 @@ url_str = "url"
 rank_str = "rank"
 track_rank_str = f"{track_str}_{rank_str}"
 
+images_str = "images"
+
+height_str = "height"
+
 # API call happens here
 my_tracks = spotify_get_all_results(
     access_token,
@@ -309,9 +313,6 @@ num_tracks_per_artist = (
         }
     )
 )
-
-# hash_str = "hash"
-# num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
 
 my_px_color_theme = px.colors.sequential.Sunset
 
@@ -416,6 +417,8 @@ underscore_term_str = f"_{term_str}"
 term_timeframes_friendly = ["short", "medium", "long"]
 term_timeframes = [f"{x}{underscore_term_str}" for x in term_timeframes_friendly]
 
+my_top_tracks_dataframes = []
+
 for bcol_index in range(len(bcols)):
     bcol = bcols[bcol_index]
     with bcol:
@@ -436,7 +439,7 @@ for bcol_index in range(len(bcols)):
                 my_top_tracks, track_id_str, album_str
             ),
             track_id_str,
-            "images",
+            images_str,
         )
 
         my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
@@ -460,7 +463,7 @@ for bcol_index in range(len(bcols)):
 
         my_top_tracks_with_artist_and_album_img = pd.merge(
             my_top_tracks_with_artist,
-            my_top_tracks_album_images[my_top_tracks_album_images["height"] == 300][
+            my_top_tracks_album_images[my_top_tracks_album_images[height_str] == 300][
                 [track_id_str, url_str]
             ].reset_index()[[track_id_str, url_str]],
             on=track_id_str,
@@ -471,6 +474,8 @@ for bcol_index in range(len(bcols)):
         ] = my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
             ";.+", "", regex=True
         )
+
+        my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
 
         for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
             html_div_code = f"""
@@ -490,10 +495,11 @@ for bcol_index in range(len(bcols)):
             st.markdown(html_style_code + "\n" + html_div_code, unsafe_allow_html=True)
 
 top_tracks_bcols = list(st.columns(3))
-for top_track_bcol in top_tracks_bcols:
+for top_track_bcol_index in range(len(top_tracks_bcols)):
+    top_track_bcol = top_tracks_bcols[top_track_bcol_index]
     with top_track_bcol:
         st.dataframe(
-            my_top_tracks_with_artist_and_album_img[
+            my_top_tracks_dataframes[top_track_bcol_index][
                 [track_rank_str, track_name_str, primary_artist_name_str]
             ].rename(
                 columns={
@@ -506,25 +512,70 @@ for top_track_bcol in top_tracks_bcols:
             hide_index=True,
         )
 
-# my_followed_artists = spotify_get_all_results(
-#     access_token,
-#     f"{spotify_api_endpoint}me/following",
-#     "application/json",
-#     query={"type": "artist"},
-#     base_obj="artists",
-# )
 
-# display(my_followed_artists.head())
 
-# my_left = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
-# my_right = my_followed_artists
 
-# my_followed_and_liked_artists_df = pd.merge(
-#     my_left, my_right, on=id_str, how="inner", suffixes=("", "_y")
-# )[my_left.columns]
 
-# display(my_followed_and_liked_artists_df.head())
-# print(my_followed_and_liked_artists_df.shape)
+
+
+
+my_followed_artists = spotify_get_all_results(
+    access_token,
+    f"{spotify_api_endpoint}me/following",
+    "application/json",
+    query={"type": "artist"},
+    base_obj="artists",
+)
+
+my_left = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
+my_right = my_followed_artists
+
+my_left_cols = [x for x in my_left.columns]
+
+merge_str = "_merge"
+
+my_followed_and_liked_artists_df = pd.merge(
+    my_left,
+    my_right,
+    on=id_str,
+    how="outer",
+    suffixes=("", "_y"),
+    indicator=True,
+)[my_left_cols + [images_str, merge_str]]
+
+my_followed_and_liked_artist_imgs = convert_json_col_to_dataframe_with_key(
+    my_followed_and_liked_artists_df.dropna(subset=images_str),
+    id_str,
+    images_str,
+)[[id_str, url_str, height_str]]
+
+my_followed_and_liked_artist_imgs = my_followed_and_liked_artist_imgs[
+    my_followed_and_liked_artist_imgs[height_str] == 320
+]
+
+my_followed_and_liked_artist_imgs.drop(height_str, axis=1, inplace=True)
+
+my_followed_and_liked_artists_df_with_img = pd.merge(
+    my_followed_and_liked_artists_df,
+    my_followed_and_liked_artist_imgs,
+    how="left",
+    on=id_str,
+)
+
+my_followed_and_liked_artists_df_with_img[url_str].fillna(
+    "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
+)
+
+my_followed_and_liked_artists_df_with_img.drop(images_str, axis=1, inplace=True)
+
+for i, df_row in my_followed_and_liked_artists_df_with_img[
+    my_followed_and_liked_artists_df_with_img[merge_str] == "left_only"
+].iterrows():
+    st.markdown(
+        f"<h2 style='text-align: center;'>{df_row[name_str]}</h2>",
+        unsafe_allow_html=True,
+    )
+    st.image(df_row[url_str])
 
 # # Create Sets
 # my_track_artists_ids = set(my_left[id_str])
