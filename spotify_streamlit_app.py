@@ -20,6 +20,43 @@ import streamlit as st
 pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", 600)
 
+track_str = "track"
+track_id_str = f"{track_str}_id"
+
+added_at_str = "added_at"
+name_str = "name"
+id_str = "id"
+artists_str = "artists"
+
+count_track_id_str = f"count_{track_id_str}"
+
+added_at_ymd_str = added_at_str + "_ymd"
+max_added_at_ymd_str = f"max_{added_at_ymd_str}"
+
+num_top_artists = 15
+artist_str = "Artist"
+num_liked_tracks_str = "Number of Liked Tracks"
+last_liked_date_str = "Last Liked Date"
+
+track_name_str = f"{track_str}_{name_str}"
+artist_name_str = f"{artist_str.lower()}_{name_str}"
+primary_artist_name_str = f"primary_{artist_name_str}"
+
+album_str = "album"
+url_str = "url"
+rank_str = "rank"
+track_rank_str = f"{track_str}_{rank_str}"
+
+images_str = "images"
+
+height_str = "height"
+
+# Set the default layout for the frontend
+st.set_page_config(layout="wide")
+
+spotify_accounts_endpoint = "https://accounts.spotify.com/"
+spotify_api_endpoint = "https://api.spotify.com/v1/"
+
 
 # Helper function
 # A field of JSON from a row of data is converted to its own dataframe
@@ -60,14 +97,6 @@ def convert_json_col_to_dataframe_with_key(df, id_col_names, json_col_name):
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
-# Convenience function to write a pandas DataFrame into the data_out folder of the project setup.
-# Args:
-# pd_df is the pandas DataFrame
-# filename is the name for the new file to write
-def spotify_write_df_to_data_out_csv(pd_df, filename):
-    pd_df.to_csv(f"data_out/{filename}.csv", index=False)
-
-
 # Convenience function to call the Spotify API
 # Args:
 # access_token: the token retrieved through Oauth 2.0
@@ -84,6 +113,7 @@ def spotify_get_all_results(
     max_parse_level=0,
     base_obj=None,
     balloons=False,
+    paginated=True,
 ):
     # Header setup
     api_call_headers = {
@@ -118,7 +148,7 @@ def spotify_get_all_results(
 
         # If the first call, determine how many pages of data the API will have to retrieve.
         # Use this calculation to create a progress bar to display.
-        if first_call:
+        if paginated and first_call:
             num_pages = int(
                 np.ceil(api_request_json["total"] / api_request_json["limit"])
             )
@@ -128,22 +158,27 @@ def spotify_get_all_results(
             progress_bar = st.progress(curr_page_num, text="Loading...")
 
         # Get the next endpoint to call, and convert the current JSON response to a DataFrame.
-        next_api_url = api_request_json["next"]
+        next_api_url = api_request_json["next"] if paginated else None
 
         retVal_list.append(
-            pd.json_normalize(api_request_json["items"], max_level=max_parse_level)
+            pd.json_normalize(
+                api_request_json["items"] if paginated else api_request_json,
+                max_level=max_parse_level,
+            )
         )
 
-        curr_page_num += 1
+        if paginated:
+            curr_page_num += 1
 
-        # Update the progress bar
-        progress_bar.progress(
-            curr_page_num / num_pages,
-            text=f"Loaded Page: {curr_page_num} of {num_pages}",
-        )
+            # Update the progress bar
+            progress_bar.progress(
+                curr_page_num / num_pages,
+                text=f"Loaded Page: {curr_page_num} of {num_pages}",
+            )
 
-    # When processing is complete, stop showing the progress bar
-    progress_bar.empty()
+    if paginated:
+        # When processing is complete, stop showing the progress bar
+        progress_bar.empty()
 
     if balloons:
         st.balloons()
@@ -152,11 +187,33 @@ def spotify_get_all_results(
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
-# Set the default layout for the frontend
-st.set_page_config(layout="wide")
+def spotify_unroll_image_helper(df):
+    my_image_size = 320
+    df_imgs = convert_json_col_to_dataframe_with_key(
+        df.dropna(subset=images_str),
+        id_str,
+        images_str,
+    )[[id_str, url_str, height_str]]
 
-spotify_accounts_endpoint = "https://accounts.spotify.com/"
-spotify_api_endpoint = "https://api.spotify.com/v1/"
+    df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
+
+    df_imgs.drop(height_str, axis=1, inplace=True)
+
+    df_imgs = pd.merge(
+        df,
+        df_imgs,
+        how="left",
+        on=id_str,
+    )
+
+    df_imgs[url_str].fillna(
+        "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
+    )
+
+    df_imgs.drop(images_str, axis=1, inplace=True)
+
+    return df_imgs
+
 
 with st.spinner("Authorizing..."):
     # Install the web driver
@@ -239,37 +296,6 @@ with st.spinner("Authorizing..."):
     # Read the resulting JSON and retrieve your access token!
     get_bearer_token_response_json = get_bearer_token_response.json()
     access_token = get_bearer_token_response_json["access_token"]
-
-track_str = "track"
-track_id_str = f"{track_str}_id"
-
-added_at_str = "added_at"
-name_str = "name"
-id_str = "id"
-artists_str = "artists"
-
-count_track_id_str = f"count_{track_id_str}"
-
-added_at_ymd_str = added_at_str + "_ymd"
-max_added_at_ymd_str = f"max_{added_at_ymd_str}"
-
-num_top_artists = 15
-artist_str = "Artist"
-num_liked_tracks_str = "Number of Liked Tracks"
-last_liked_date_str = "Last Liked Date"
-
-track_name_str = f"{track_str}_{name_str}"
-artist_name_str = f"{artist_str.lower()}_{name_str}"
-primary_artist_name_str = f"primary_{artist_name_str}"
-
-album_str = "album"
-url_str = "url"
-rank_str = "rank"
-track_rank_str = f"{track_str}_{rank_str}"
-
-images_str = "images"
-
-height_str = "height"
 
 # API call happens here
 my_tracks = spotify_get_all_results(
@@ -513,11 +539,40 @@ for top_track_bcol_index in range(len(top_tracks_bcols)):
         )
 
 
+artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
+max_artists_per_section = 50
 
+# Convert the pandas Series to a list. The endpoint can only handle 50 artists at a time.
+# Calculate the number of pages and split. Formula: ceiling(number of rows divided by the page limit).
+# Collapse the list of strings by a comma.
+artist_ids_to_query_list = [
+    ",".join(x)
+    for x in np.array_split(
+        list(artist_ids_to_query),
+        np.ceil(len(artist_ids_to_query) / max_artists_per_section),
+    )
+]
 
+my_artists_list = []
+for artist_id_query_string in artist_ids_to_query_list:
+    my_artists_list.append(
+        spotify_get_all_results(
+            access_token,
+            f"{spotify_api_endpoint}artists",
+            "application/json",
+            query={"ids": artist_id_query_string},
+            base_obj="artists",
+            paginated=False,
+        )
+    )
+my_liked_artists = pd.merge(
+    pd.concat(my_artists_list).reset_index(drop=True)[[id_str, images_str]],
+    num_tracks_per_artist,
+    on=id_str,
+    how="inner",
+)
 
-
-
+my_liked_artists_imgs = spotify_unroll_image_helper(my_liked_artists)
 
 my_followed_artists = spotify_get_all_results(
     access_token,
@@ -527,8 +582,10 @@ my_followed_artists = spotify_get_all_results(
     base_obj="artists",
 )
 
-my_left = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
-my_right = my_followed_artists
+my_followed_artists_imgs = spotify_unroll_image_helper(my_followed_artists)
+
+my_left = my_liked_artists_imgs
+my_right = my_followed_artists_imgs
 
 my_left_cols = [x for x in my_left.columns]
 
@@ -541,7 +598,7 @@ my_followed_and_liked_artists_df = pd.merge(
     how="outer",
     suffixes=("", "_y"),
     indicator=True,
-)[my_left_cols + [images_str, merge_str]]
+)#[my_left_cols + [images_str, merge_str]]
 
 my_followed_and_liked_artist_imgs = convert_json_col_to_dataframe_with_key(
     my_followed_and_liked_artists_df.dropna(subset=images_str),
@@ -550,7 +607,7 @@ my_followed_and_liked_artist_imgs = convert_json_col_to_dataframe_with_key(
 )[[id_str, url_str, height_str]]
 
 my_followed_and_liked_artist_imgs = my_followed_and_liked_artist_imgs[
-    my_followed_and_liked_artist_imgs[height_str] == 320
+    my_followed_and_liked_artist_imgs[height_str] == my_artist_image_size
 ]
 
 my_followed_and_liked_artist_imgs.drop(height_str, axis=1, inplace=True)
