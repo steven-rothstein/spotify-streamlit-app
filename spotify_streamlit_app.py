@@ -215,6 +215,89 @@ def spotify_unroll_image_helper(df):
     return df_imgs
 
 
+def generate_html_style_code(img_size_px):
+    return (
+        """
+<style>
+    body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+    }
+
+    .container {
+        display: flex;
+        align-items: center;
+    }
+
+    .number-container {
+        margin-right: 20px;
+        text-align: center;
+        font-size: 24px;
+    }
+
+    .image-container {
+        margin-right: 20px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+
+    .image-container img {"""
+        + f"""
+        width: {img_size_px}px;
+        height: auto;
+        display: block;"""
+        + """
+    }
+
+    .text-container {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .text-container p {
+        margin: 0;
+    }
+
+    .artist {
+        color: grey;
+    }
+</style>"""
+    )
+
+
+def generate_div_block(
+    img_src_holder_str, strong_txt_holder_str, p_txt_holder_str, b_txt_holder_str=None
+):
+    div_start = f"""
+<div class='container'>"""
+
+    if b_txt_holder_str:
+        div_num_container = f"""
+    <div class="number-container">
+        <b>{b_txt_holder_str}</b>
+    </div>"""
+
+    div_main_containers = f"""
+    <div class="image-container">
+        <img src="{img_src_holder_str}" alt="Image">
+    </div>
+    <div class="text-container">
+        <strong>{strong_txt_holder_str}</strong>
+        <p class="artist">{p_txt_holder_str}</p>
+    </div>
+</div>"""
+
+    return (
+        div_start
+        + (div_num_container if b_txt_holder_str else "")
+        + div_main_containers
+    )
+
+
 with st.spinner("Authorizing..."):
     # Install the web driver
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
@@ -353,7 +436,6 @@ px_top_artists_by_track_count = px.bar(
     color_continuous_scale=my_px_color_theme,
     color=count_track_id_str,
     labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
-    title=f"Top {num_top_artists} Artists by Liked Track Count",
 )
 px_top_artists_by_track_count.update_traces(
     textangle=0, textposition="outside", cliponaxis=False
@@ -366,6 +448,7 @@ px_displaybarconfig = {"displayModeBar": False}
 topcol1, topcol2 = st.columns(2)
 
 with topcol1:
+    st.markdown(f"**Top {num_top_artists} Artists by Liked Track Count**")
     st.plotly_chart(
         px_top_artists_by_track_count,
         use_container_width=True,
@@ -387,55 +470,6 @@ with topcol2:
         use_container_width=True,
         hide_index=True,
     )
-
-html_style_code = """
-<style>
-    body {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-    }
-
-    .container {
-        display: flex;
-        align-items: center;
-    }
-
-    .number-container {
-        #margin-top: 15px;
-        margin-right: 20px;
-        text-align: center;
-        font-size: 24px;
-    }
-
-    .image-container {
-        margin-right: 20px;
-        margin-top: 20px;
-        margin-bottom: 20px;
-    }
-
-    .image-container img {
-        width: 100px;
-        height: auto;
-        display: block;
-    }
-
-    .text-container {
-        display: flex;
-        flex-direction: column;
-        text-align: left;
-    }
-
-    .text-container p {
-        margin: 0;
-    }
-
-    .artist {
-        color: grey;
-    }
-</style>"""
 
 bcols = list(st.columns(3))
 term_str = "term"
@@ -504,21 +538,18 @@ for bcol_index in range(len(bcols)):
         my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
 
         for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
-            html_div_code = f"""
-<div class="container">
-    <div class="number-container">
-        <b>{f"{df_row[track_rank_str]:02d}"}</b>
-    </div>
-    <div class="image-container">
-        <img src="{df_row[url_str]}" alt="Image">
-    </div>
-    <div class="text-container">
-        <strong>{df_row[track_name_str]}</strong>
-        <p class="artist">{df_row[primary_artist_name_str]}</p>
-    </div>
-</div>"""
+            html_div_code = generate_div_block(
+                df_row[url_str],
+                df_row[track_name_str],
+                df_row[primary_artist_name_str],
+                f"{df_row[track_rank_str]:02d}",
+            )
 
-            st.markdown(html_style_code + "\n" + html_div_code, unsafe_allow_html=True)
+            st.markdown(
+                generate_html_style_code(100) + "\n" + html_div_code,
+                unsafe_allow_html=True,
+            )
+
 
 top_tracks_bcols = list(st.columns(3))
 for top_track_bcol_index in range(len(top_tracks_bcols)):
@@ -590,81 +621,31 @@ my_right = my_followed_artists_imgs
 my_left_cols = [x for x in my_left.columns]
 
 merge_str = "_merge"
+underscore_y_str = "_y"
+url_y_str = url_str + underscore_y_str
 
 my_followed_and_liked_artists_df = pd.merge(
     my_left,
     my_right,
     on=id_str,
     how="outer",
-    suffixes=("", "_y"),
+    suffixes=("", underscore_y_str),
     indicator=True,
-)#[my_left_cols + [images_str, merge_str]]
+)[my_left_cols + [url_y_str, merge_str]]
 
-my_followed_and_liked_artist_imgs = convert_json_col_to_dataframe_with_key(
-    my_followed_and_liked_artists_df.dropna(subset=images_str),
-    id_str,
-    images_str,
-)[[id_str, url_str, height_str]]
+artist_urls_to_retrieve = my_followed_and_liked_artists_df[url_str].isna()
 
-my_followed_and_liked_artist_imgs = my_followed_and_liked_artist_imgs[
-    my_followed_and_liked_artist_imgs[height_str] == my_artist_image_size
-]
+my_followed_and_liked_artists_df.loc[
+    artist_urls_to_retrieve, url_str
+] = my_followed_and_liked_artists_df.loc[artist_urls_to_retrieve, url_y_str]
 
-my_followed_and_liked_artist_imgs.drop(height_str, axis=1, inplace=True)
-
-my_followed_and_liked_artists_df_with_img = pd.merge(
-    my_followed_and_liked_artists_df,
-    my_followed_and_liked_artist_imgs,
-    how="left",
-    on=id_str,
-)
-
-my_followed_and_liked_artists_df_with_img[url_str].fillna(
-    "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
-)
-
-my_followed_and_liked_artists_df_with_img.drop(images_str, axis=1, inplace=True)
-
-for i, df_row in my_followed_and_liked_artists_df_with_img[
-    my_followed_and_liked_artists_df_with_img[merge_str] == "left_only"
+for i, df_row in my_followed_and_liked_artists_df[
+    my_followed_and_liked_artists_df[merge_str] == "left_only"
 ].iterrows():
-    st.markdown(
-        f"<h2 style='text-align: center;'>{df_row[name_str]}</h2>",
-        unsafe_allow_html=True,
+    html_div_code = generate_div_block(
+        df_row[url_str], df_row[name_str], f"{df_row[count_track_id_str]} Liked Songs"
     )
-    st.image(df_row[url_str])
 
-# # Create Sets
-# my_track_artists_ids = set(my_left[id_str])
-# my_followed_artists_ids = set(my_right[id_str])
-# my_followed_and_liked_artists_ids = set(my_followed_and_liked_artists_df[id_str])
-
-# # Use Set operations
-# my_unfollowed_track_artists_ids = (
-#     my_track_artists_ids - my_followed_and_liked_artists_ids
-# )
-# my_followed_and_nonliked_artists_ids = (
-#     my_followed_artists_ids - my_followed_and_liked_artists_ids
-# )
-
-# # TODO handle when my_followed_and_nonliked_artists_ids is non-empty
-
-# # Inspect data
-# my_unfollowed_track_artists_df = my_left[
-#     my_left[id_str].isin(my_unfollowed_track_artists_ids)
-# ]
-
-# my_top_unfollowed_artists_indices = (
-#     my_unfollowed_track_artists_df[count_track_id_str] > 2
-# )
-
-# my_top_unfollowed_artists_df = my_unfollowed_track_artists_df[
-#     my_top_unfollowed_artists_indices
-# ].reset_index(drop=True)
-
-# my_top_unfollowed_artists_df[hash_str] = my_top_unfollowed_artists_df[name_str].apply(
-#     hash
-# )
-
-# display(my_top_unfollowed_artists_df[[hash_str, count_track_id_str]].head())
-# print(my_top_unfollowed_artists_df.shape)
+    st.markdown(
+        generate_html_style_code(200) + "\n" + html_div_code, unsafe_allow_html=True
+    )
