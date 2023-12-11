@@ -20,6 +20,43 @@ import streamlit as st
 pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", 600)
 
+track_str = "track"
+track_id_str = f"{track_str}_id"
+
+added_at_str = "added_at"
+name_str = "name"
+id_str = "id"
+artists_str = "artists"
+
+count_track_id_str = f"count_{track_id_str}"
+
+added_at_ymd_str = added_at_str + "_ymd"
+max_added_at_ymd_str = f"max_{added_at_ymd_str}"
+
+num_top_artists = 15
+artist_str = "Artist"
+num_liked_tracks_str = "Number of Liked Tracks"
+last_liked_date_str = "Last Liked Date"
+
+track_name_str = f"{track_str}_{name_str}"
+artist_name_str = f"{artist_str.lower()}_{name_str}"
+primary_artist_name_str = f"primary_{artist_name_str}"
+
+album_str = "album"
+url_str = "url"
+rank_str = "rank"
+track_rank_str = f"{track_str}_{rank_str}"
+
+images_str = "images"
+
+height_str = "height"
+
+# Set the default layout for the frontend
+st.set_page_config(layout="wide")
+
+spotify_accounts_endpoint = "https://accounts.spotify.com/"
+spotify_api_endpoint = "https://api.spotify.com/v1/"
+
 
 # Helper function
 # A field of JSON from a row of data is converted to its own dataframe
@@ -60,14 +97,6 @@ def convert_json_col_to_dataframe_with_key(df, id_col_names, json_col_name):
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
-# Convenience function to write a pandas DataFrame into the data_out folder of the project setup.
-# Args:
-# pd_df is the pandas DataFrame
-# filename is the name for the new file to write
-def spotify_write_df_to_data_out_csv(pd_df, filename):
-    pd_df.to_csv(f"data_out/{filename}.csv", index=False)
-
-
 # Convenience function to call the Spotify API
 # Args:
 # access_token: the token retrieved through Oauth 2.0
@@ -84,6 +113,7 @@ def spotify_get_all_results(
     max_parse_level=0,
     base_obj=None,
     balloons=False,
+    paginated=True,
 ):
     # Header setup
     api_call_headers = {
@@ -118,7 +148,7 @@ def spotify_get_all_results(
 
         # If the first call, determine how many pages of data the API will have to retrieve.
         # Use this calculation to create a progress bar to display.
-        if first_call:
+        if paginated and first_call:
             num_pages = int(
                 np.ceil(api_request_json["total"] / api_request_json["limit"])
             )
@@ -128,22 +158,27 @@ def spotify_get_all_results(
             progress_bar = st.progress(curr_page_num, text="Loading...")
 
         # Get the next endpoint to call, and convert the current JSON response to a DataFrame.
-        next_api_url = api_request_json["next"]
+        next_api_url = api_request_json["next"] if paginated else None
 
         retVal_list.append(
-            pd.json_normalize(api_request_json["items"], max_level=max_parse_level)
+            pd.json_normalize(
+                api_request_json["items"] if paginated else api_request_json,
+                max_level=max_parse_level,
+            )
         )
 
-        curr_page_num += 1
+        if paginated:
+            curr_page_num += 1
 
-        # Update the progress bar
-        progress_bar.progress(
-            curr_page_num / num_pages,
-            text=f"Loaded Page: {curr_page_num} of {num_pages}",
-        )
+            # Update the progress bar
+            progress_bar.progress(
+                curr_page_num / num_pages,
+                text=f"Loaded Page: {curr_page_num} of {num_pages}",
+            )
 
-    # When processing is complete, stop showing the progress bar
-    progress_bar.empty()
+    if paginated:
+        # When processing is complete, stop showing the progress bar
+        progress_bar.empty()
 
     if balloons:
         st.balloons()
@@ -152,11 +187,116 @@ def spotify_get_all_results(
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
-# Set the default layout for the frontend
-st.set_page_config(layout="wide")
+def spotify_unroll_image_helper(df):
+    my_image_size = 320
+    df_imgs = convert_json_col_to_dataframe_with_key(
+        df.dropna(subset=images_str),
+        id_str,
+        images_str,
+    )[[id_str, url_str, height_str]]
 
-spotify_accounts_endpoint = "https://accounts.spotify.com/"
-spotify_api_endpoint = "https://api.spotify.com/v1/"
+    df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
+
+    df_imgs.drop(height_str, axis=1, inplace=True)
+
+    df_imgs = pd.merge(
+        df,
+        df_imgs,
+        how="left",
+        on=id_str,
+    )
+
+    df_imgs[url_str].fillna(
+        "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
+    )
+
+    df_imgs.drop(images_str, axis=1, inplace=True)
+
+    return df_imgs
+
+
+def generate_html_style_code(img_size_px):
+    return (
+        """
+<style>
+    body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+    }
+
+    .container {
+        display: flex;
+        align-items: center;
+    }
+
+    .number-container {
+        margin-right: 20px;
+        text-align: center;
+        font-size: 24px;
+    }
+
+    .image-container {
+        margin-right: 20px;
+        margin-top: 20px;
+        margin-bottom: 20px;
+    }
+
+    .image-container img {"""
+        + f"""
+        width: {img_size_px}px;
+        height: auto;
+        display: block;"""
+        + """
+    }
+
+    .text-container {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .text-container p {
+        margin: 0;
+    }
+
+    .artist {
+        color: grey;
+    }
+</style>"""
+    )
+
+
+def generate_div_block(
+    img_src_holder_str, strong_txt_holder_str, p_txt_holder_str, b_txt_holder_str=None
+):
+    div_start = f"""
+<div class='container'>"""
+
+    if b_txt_holder_str:
+        div_num_container = f"""
+    <div class="number-container">
+        <b>{b_txt_holder_str}</b>
+    </div>"""
+
+    div_main_containers = f"""
+    <div class="image-container">
+        <img src="{img_src_holder_str}" alt="Image">
+    </div>
+    <div class="text-container">
+        <strong>{strong_txt_holder_str}</strong>
+        <p class="artist">{p_txt_holder_str}</p>
+    </div>
+</div>"""
+
+    return (
+        div_start
+        + (div_num_container if b_txt_holder_str else "")
+        + div_main_containers
+    )
+
 
 with st.spinner("Authorizing..."):
     # Install the web driver
@@ -240,33 +380,6 @@ with st.spinner("Authorizing..."):
     get_bearer_token_response_json = get_bearer_token_response.json()
     access_token = get_bearer_token_response_json["access_token"]
 
-track_str = "track"
-track_id_str = f"{track_str}_id"
-
-added_at_str = "added_at"
-name_str = "name"
-id_str = "id"
-artists_str = "artists"
-
-count_track_id_str = f"count_{track_id_str}"
-
-added_at_ymd_str = added_at_str + "_ymd"
-max_added_at_ymd_str = f"max_{added_at_ymd_str}"
-
-num_top_artists = 15
-artist_str = "Artist"
-num_liked_tracks_str = "Number of Liked Tracks"
-last_liked_date_str = "Last Liked Date"
-
-track_name_str = f"{track_str}_{name_str}"
-artist_name_str = f"{artist_str.lower()}_{name_str}"
-primary_artist_name_str = f"primary_{artist_name_str}"
-
-album_str = "album"
-url_str = "url"
-rank_str = "rank"
-track_rank_str = f"{track_str}_{rank_str}"
-
 # API call happens here
 my_tracks = spotify_get_all_results(
     access_token,
@@ -310,9 +423,6 @@ num_tracks_per_artist = (
     )
 )
 
-# hash_str = "hash"
-# num_tracks_per_artist[hash_str] = num_tracks_per_artist[name_str].apply(hash)
-
 my_px_color_theme = px.colors.sequential.Sunset
 
 px_top_artists_by_track_count = px.bar(
@@ -326,7 +436,6 @@ px_top_artists_by_track_count = px.bar(
     color_continuous_scale=my_px_color_theme,
     color=count_track_id_str,
     labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
-    title=f"Top {num_top_artists} Artists by Liked Track Count",
 )
 px_top_artists_by_track_count.update_traces(
     textangle=0, textposition="outside", cliponaxis=False
@@ -339,6 +448,7 @@ px_displaybarconfig = {"displayModeBar": False}
 topcol1, topcol2 = st.columns(2)
 
 with topcol1:
+    st.markdown(f"**Top {num_top_artists} Artists by Liked Track Count**")
     st.plotly_chart(
         px_top_artists_by_track_count,
         use_container_width=True,
@@ -361,60 +471,13 @@ with topcol2:
         hide_index=True,
     )
 
-html_style_code = """
-<style>
-    body {
-        margin: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-    }
-
-    .container {
-        display: flex;
-        align-items: center;
-    }
-
-    .number-container {
-        #margin-top: 15px;
-        margin-right: 20px;
-        text-align: center;
-        font-size: 24px;
-    }
-
-    .image-container {
-        margin-right: 20px;
-        margin-top: 20px;
-        margin-bottom: 20px;
-    }
-
-    .image-container img {
-        width: 100px;
-        height: auto;
-        display: block;
-    }
-
-    .text-container {
-        display: flex;
-        flex-direction: column;
-        text-align: left;
-    }
-
-    .text-container p {
-        margin: 0;
-    }
-
-    .artist {
-        color: grey;
-    }
-</style>"""
-
 bcols = list(st.columns(3))
 term_str = "term"
 underscore_term_str = f"_{term_str}"
 term_timeframes_friendly = ["short", "medium", "long"]
 term_timeframes = [f"{x}{underscore_term_str}" for x in term_timeframes_friendly]
+
+my_top_tracks_dataframes = []
 
 for bcol_index in range(len(bcols)):
     bcol = bcols[bcol_index]
@@ -436,7 +499,7 @@ for bcol_index in range(len(bcols)):
                 my_top_tracks, track_id_str, album_str
             ),
             track_id_str,
-            "images",
+            images_str,
         )
 
         my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
@@ -460,7 +523,7 @@ for bcol_index in range(len(bcols)):
 
         my_top_tracks_with_artist_and_album_img = pd.merge(
             my_top_tracks_with_artist,
-            my_top_tracks_album_images[my_top_tracks_album_images["height"] == 300][
+            my_top_tracks_album_images[my_top_tracks_album_images[height_str] == 300][
                 [track_id_str, url_str]
             ].reset_index()[[track_id_str, url_str]],
             on=track_id_str,
@@ -472,28 +535,28 @@ for bcol_index in range(len(bcols)):
             ";.+", "", regex=True
         )
 
-        for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
-            html_div_code = f"""
-<div class="container">
-    <div class="number-container">
-        <b>{f"{df_row[track_rank_str]:02d}"}</b>
-    </div>
-    <div class="image-container">
-        <img src="{df_row[url_str]}" alt="Image">
-    </div>
-    <div class="text-container">
-        <strong>{df_row[track_name_str]}</strong>
-        <p class="artist">{df_row[primary_artist_name_str]}</p>
-    </div>
-</div>"""
+        my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
 
-            st.markdown(html_style_code + "\n" + html_div_code, unsafe_allow_html=True)
+        for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
+            html_div_code = generate_div_block(
+                df_row[url_str],
+                df_row[track_name_str],
+                df_row[primary_artist_name_str],
+                f"{df_row[track_rank_str]:02d}",
+            )
+
+            st.markdown(
+                generate_html_style_code(100) + "\n" + html_div_code,
+                unsafe_allow_html=True,
+            )
+
 
 top_tracks_bcols = list(st.columns(3))
-for top_track_bcol in top_tracks_bcols:
+for top_track_bcol_index in range(len(top_tracks_bcols)):
+    top_track_bcol = top_tracks_bcols[top_track_bcol_index]
     with top_track_bcol:
         st.dataframe(
-            my_top_tracks_with_artist_and_album_img[
+            my_top_tracks_dataframes[top_track_bcol_index][
                 [track_rank_str, track_name_str, primary_artist_name_str]
             ].rename(
                 columns={
@@ -506,57 +569,83 @@ for top_track_bcol in top_tracks_bcols:
             hide_index=True,
         )
 
-# my_followed_artists = spotify_get_all_results(
-#     access_token,
-#     f"{spotify_api_endpoint}me/following",
-#     "application/json",
-#     query={"type": "artist"},
-#     base_obj="artists",
-# )
 
-# display(my_followed_artists.head())
+artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
+max_artists_per_section = 50
 
-# my_left = num_tracks_per_artist[[id_str, name_str, count_track_id_str]]
-# my_right = my_followed_artists
+# Convert the pandas Series to a list. The endpoint can only handle 50 artists at a time.
+# Calculate the number of pages and split. Formula: ceiling(number of rows divided by the page limit).
+# Collapse the list of strings by a comma.
+artist_ids_to_query_list = [
+    ",".join(x)
+    for x in np.array_split(
+        list(artist_ids_to_query),
+        np.ceil(len(artist_ids_to_query) / max_artists_per_section),
+    )
+]
 
-# my_followed_and_liked_artists_df = pd.merge(
-#     my_left, my_right, on=id_str, how="inner", suffixes=("", "_y")
-# )[my_left.columns]
+my_artists_list = []
+for artist_id_query_string in artist_ids_to_query_list:
+    my_artists_list.append(
+        spotify_get_all_results(
+            access_token,
+            f"{spotify_api_endpoint}artists",
+            "application/json",
+            query={"ids": artist_id_query_string},
+            base_obj="artists",
+            paginated=False,
+        )
+    )
+my_liked_artists = pd.merge(
+    pd.concat(my_artists_list).reset_index(drop=True)[[id_str, images_str]],
+    num_tracks_per_artist,
+    on=id_str,
+    how="inner",
+)
 
-# display(my_followed_and_liked_artists_df.head())
-# print(my_followed_and_liked_artists_df.shape)
+my_liked_artists_imgs = spotify_unroll_image_helper(my_liked_artists)
 
-# # Create Sets
-# my_track_artists_ids = set(my_left[id_str])
-# my_followed_artists_ids = set(my_right[id_str])
-# my_followed_and_liked_artists_ids = set(my_followed_and_liked_artists_df[id_str])
+my_followed_artists = spotify_get_all_results(
+    access_token,
+    f"{spotify_api_endpoint}me/following",
+    "application/json",
+    query={"type": "artist"},
+    base_obj="artists",
+)
 
-# # Use Set operations
-# my_unfollowed_track_artists_ids = (
-#     my_track_artists_ids - my_followed_and_liked_artists_ids
-# )
-# my_followed_and_nonliked_artists_ids = (
-#     my_followed_artists_ids - my_followed_and_liked_artists_ids
-# )
+my_followed_artists_imgs = spotify_unroll_image_helper(my_followed_artists)
 
-# # TODO handle when my_followed_and_nonliked_artists_ids is non-empty
+my_left = my_liked_artists_imgs
+my_right = my_followed_artists_imgs
 
-# # Inspect data
-# my_unfollowed_track_artists_df = my_left[
-#     my_left[id_str].isin(my_unfollowed_track_artists_ids)
-# ]
+my_left_cols = [x for x in my_left.columns]
 
-# my_top_unfollowed_artists_indices = (
-#     my_unfollowed_track_artists_df[count_track_id_str] > 2
-# )
+merge_str = "_merge"
+underscore_y_str = "_y"
+url_y_str = url_str + underscore_y_str
 
-# my_top_unfollowed_artists_df = my_unfollowed_track_artists_df[
-#     my_top_unfollowed_artists_indices
-# ].reset_index(drop=True)
+my_followed_and_liked_artists_df = pd.merge(
+    my_left,
+    my_right,
+    on=id_str,
+    how="outer",
+    suffixes=("", underscore_y_str),
+    indicator=True,
+)[my_left_cols + [url_y_str, merge_str]]
 
-# my_top_unfollowed_artists_df[hash_str] = my_top_unfollowed_artists_df[name_str].apply(
-#     hash
-# )
+artist_urls_to_retrieve = my_followed_and_liked_artists_df[url_str].isna()
 
-# display(my_top_unfollowed_artists_df[[hash_str, count_track_id_str]].head())
-# print(my_top_unfollowed_artists_df.shape)
+my_followed_and_liked_artists_df.loc[
+    artist_urls_to_retrieve, url_str
+] = my_followed_and_liked_artists_df.loc[artist_urls_to_retrieve, url_y_str]
+
+for i, df_row in my_followed_and_liked_artists_df[
+    my_followed_and_liked_artists_df[merge_str] == "left_only"
+].iterrows():
+    html_div_code = generate_div_block(
+        df_row[url_str], df_row[name_str], f"{df_row[count_track_id_str]} Liked Songs"
+    )
+
+    st.markdown(
+        generate_html_style_code(200) + "\n" + html_div_code, unsafe_allow_html=True
+    )
