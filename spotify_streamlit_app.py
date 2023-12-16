@@ -463,6 +463,8 @@ px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
 
 px_displaybarconfig = {"displayModeBar": False}
 
+st.subheader("Artists by Liked Track Count")
+
 topcol1, topcol2 = st.columns(2)
 
 with topcol1:
@@ -641,6 +643,7 @@ my_left_cols = [x for x in my_left.columns]
 merge_str = "_merge"
 underscore_y_str = "_y"
 url_y_str = url_str + underscore_y_str
+name_y_str = name_str + underscore_y_str
 
 my_followed_and_liked_artists_df = pd.merge(
     my_left,
@@ -649,13 +652,20 @@ my_followed_and_liked_artists_df = pd.merge(
     how="outer",
     suffixes=("", underscore_y_str),
     indicator=True,
-)[my_left_cols + [url_y_str, merge_str]]
+)[my_left_cols + [name_y_str, url_y_str, merge_str]]
 
-artist_urls_to_retrieve = my_followed_and_liked_artists_df[url_str].isna()
+unfollow_artist_rec_rows_to_retrieve = my_followed_and_liked_artists_df[name_str].isna()
+unfollow_artist_rec_replace_vals = my_followed_and_liked_artists_df.loc[
+    unfollow_artist_rec_rows_to_retrieve, [name_y_str, url_y_str]
+]
 
 my_followed_and_liked_artists_df.loc[
-    artist_urls_to_retrieve, url_str
-] = my_followed_and_liked_artists_df.loc[artist_urls_to_retrieve, url_y_str]
+    unfollow_artist_rec_rows_to_retrieve, [name_str, url_str]
+] = unfollow_artist_rec_replace_vals.values
+
+my_followed_and_liked_artists_df = my_followed_and_liked_artists_df[
+    my_left_cols + [merge_str]
+]
 
 followrecscol, unfollowrecscol = st.columns(2)
 no_recs_str = "No recommendations. You are on top of things!"
@@ -668,6 +678,7 @@ with followrecscol:
         & (my_followed_and_liked_artists_df[count_track_id_str] >= 8)
     ]
     if len(to_iter) > 0:
+        to_iter = to_iter.astype({count_track_id_str: int})
         for i, df_row in to_iter.iterrows():
             st.markdown(
                 generate_style_and_div_blocks(
