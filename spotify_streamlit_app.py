@@ -215,86 +215,104 @@ def spotify_unroll_image_helper(df):
     return df_imgs
 
 
-def generate_html_style_code(img_size_px):
-    return (
-        """
+def generate_html_style_code(img_size_px, style_tag_suffix):
+    return f"""
 <style>
-    body {
+    body {{
         margin: 0;
         display: flex;
         align-items: center;
         justify-content: center;
         height: 100vh;
-    }
+    }}
 
-    .container {
+    .container-{style_tag_suffix} {{
         display: flex;
         align-items: center;
-    }
+    }}
 
-    .number-container {
+    .number-container-{style_tag_suffix} {{
         margin-right: 20px;
         text-align: center;
         font-size: 24px;
-    }
+    }}
 
-    .image-container {
+    .image-container-{style_tag_suffix} {{
         margin-right: 20px;
         margin-top: 20px;
         margin-bottom: 20px;
-    }
+    }}
 
-    .image-container img {"""
-        + f"""
+    .image-container-{style_tag_suffix} img {{
         width: {img_size_px}px;
         height: auto;
-        display: block;"""
-        + """
-    }
+        display: block;
+    }}
 
-    .text-container {
+    .text-container-{style_tag_suffix} {{
         display: flex;
         flex-direction: column;
         text-align: left;
-    }
+    }}
 
-    .text-container p {
+    .text-container-{style_tag_suffix} p {{
         margin: 0;
-    }
+    }}
 
-    .artist {
+    .text-subheader-{style_tag_suffix} {{
         color: grey;
-    }
+    }}
 </style>"""
-    )
 
 
 def generate_div_block(
-    img_src_holder_str, strong_txt_holder_str, p_txt_holder_str, b_txt_holder_str=None
+    style_tag_suffix,
+    img_src_holder_str,
+    strong_txt_holder_str,
+    p_txt_holder_str,
+    b_txt_holder_str=None,
 ):
     div_start = f"""
-<div class='container'>"""
+<div class='container-{style_tag_suffix}'>"""
 
+    div_num_container = ""
     if b_txt_holder_str:
         div_num_container = f"""
-    <div class="number-container">
+    <div class="number-container-{style_tag_suffix}">
         <b>{b_txt_holder_str}</b>
     </div>"""
 
     div_main_containers = f"""
-    <div class="image-container">
+    <div class="image-container-{style_tag_suffix}">
         <img src="{img_src_holder_str}" alt="Image">
     </div>
-    <div class="text-container">
+    <div class="text-container-{style_tag_suffix}">
         <strong>{strong_txt_holder_str}</strong>
-        <p class="artist">{p_txt_holder_str}</p>
+        <p class="text-subheader-{style_tag_suffix}">{p_txt_holder_str}</p>
     </div>
 </div>"""
 
+    return div_start + div_num_container + div_main_containers
+
+
+def generate_style_and_div_blocks(
+    img_size_px,
+    style_tag_suffix,
+    img_src_holder_str,
+    strong_txt_holder_str,
+    p_txt_holder_str,
+    b_txt_holder_str=None,
+):
     return (
-        div_start
-        + (div_num_container if b_txt_holder_str else "")
-        + div_main_containers
+        generate_html_style_code(img_size_px, style_tag_suffix)
+        + "\n"
+        + generate_div_block(
+            style_tag_suffix,
+            img_src_holder_str,
+            strong_txt_holder_str,
+            p_txt_holder_str,
+            b_txt_holder_str,
+        )
     )
 
 
@@ -538,15 +556,15 @@ for bcol_index in range(len(bcols)):
         my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
 
         for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
-            html_div_code = generate_div_block(
-                df_row[url_str],
-                df_row[track_name_str],
-                df_row[primary_artist_name_str],
-                f"{df_row[track_rank_str]:02d}",
-            )
-
             st.markdown(
-                generate_html_style_code(100) + "\n" + html_div_code,
+                generate_style_and_div_blocks(
+                    100,
+                    "toptracks",
+                    df_row[url_str],
+                    df_row[track_name_str],
+                    df_row[primary_artist_name_str],
+                    f"{df_row[track_rank_str]:02d}",
+                ),
                 unsafe_allow_html=True,
             )
 
@@ -639,13 +657,47 @@ my_followed_and_liked_artists_df.loc[
     artist_urls_to_retrieve, url_str
 ] = my_followed_and_liked_artists_df.loc[artist_urls_to_retrieve, url_y_str]
 
-for i, df_row in my_followed_and_liked_artists_df[
-    my_followed_and_liked_artists_df[merge_str] == "left_only"
-].iterrows():
-    html_div_code = generate_div_block(
-        df_row[url_str], df_row[name_str], f"{df_row[count_track_id_str]} Liked Songs"
-    )
+followrecscol, unfollowrecscol = st.columns(2)
+no_recs_str = "No recommendations. You are on top of things!"
+recs_img_size = 200
 
-    st.markdown(
-        generate_html_style_code(200) + "\n" + html_div_code, unsafe_allow_html=True
-    )
+with followrecscol:
+    st.subheader("Recommended Artists to Follow")
+    to_iter = my_followed_and_liked_artists_df[
+        (my_followed_and_liked_artists_df[merge_str] == "left_only")
+        & (my_followed_and_liked_artists_df[count_track_id_str] >= 8)
+    ]
+    if len(to_iter) > 0:
+        for i, df_row in to_iter.iterrows():
+            st.markdown(
+                generate_style_and_div_blocks(
+                    recs_img_size,
+                    "followrec",
+                    df_row[url_str],
+                    df_row[name_str],
+                    f"{df_row[count_track_id_str]} Liked Songs",
+                ),
+                unsafe_allow_html=True,
+            )
+    else:
+        st.success(no_recs_str)
+
+with unfollowrecscol:
+    st.subheader("Recommended Artists to Unfollow")
+    to_iter = my_followed_and_liked_artists_df[
+        my_followed_and_liked_artists_df[merge_str] == "right_only"
+    ]
+    if len(to_iter) > 0:
+        for i, df_row in to_iter.iterrows():
+            st.markdown(
+                generate_style_and_div_blocks(
+                    recs_img_size,
+                    "unfollowrec",
+                    df_row[url_str],
+                    df_row[name_str],
+                    "No Liked Songs",
+                ),
+                unsafe_allow_html=True,
+            )
+    else:
+        st.success(no_recs_str)
