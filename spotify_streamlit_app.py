@@ -425,7 +425,7 @@ def run_app_contents(access_token):
     topcol1, topcol2 = st.columns(2)
 
     with topcol1:
-        st.markdown(f"**Top {num_top_artists} Artists by Liked Track Count**")
+        st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
         st.plotly_chart(
             px_top_artists_by_track_count,
             use_container_width=True,
@@ -433,7 +433,7 @@ def run_app_contents(access_token):
         )
 
     with topcol2:
-        st.markdown("**All Artists and Liked Track Counts**")
+        st.subheader("All Artists and Liked Track Counts")
         st.dataframe(
             num_tracks_per_artist[
                 [name_str, count_track_id_str, max_added_at_ymd_str]
