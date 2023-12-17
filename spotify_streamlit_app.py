@@ -2,20 +2,26 @@ import json
 import requests
 import jmespath
 import base64
-import yaml
 
-import ipywidgets as widgets
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
 import pandas as pd
 
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
 import time
 import streamlit as st
+
+import sys
+
+clargs = sys.argv
+use_selenium = False
+if (len(clargs) == 2) and (clargs[1] == "selenium"):
+    use_selenium = True
+
+    import yaml
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
 
 pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", 600)
@@ -462,8 +468,6 @@ px_top_artists_by_track_count.update_coloraxes(showscale=False)
 px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
 
 px_displaybarconfig = {"displayModeBar": False}
-
-st.subheader("Artists by Liked Track Count")
 
 topcol1, topcol2 = st.columns(2)
 
