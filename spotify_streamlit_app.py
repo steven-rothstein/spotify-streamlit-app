@@ -398,7 +398,7 @@ def run_app_contents(access_token):
         )
     )
 
-    st.link_button("Logout", "https://spotify.com/logout", type = "primary")
+    st.link_button("Logout", "https://spotify.com/logout", type="primary")
 
     my_px_color_theme = px.colors.sequential.Sunset
 
@@ -740,9 +740,7 @@ if code_str not in query_params:
             driver.close()
             driver.quit()
 
-            run_app(
-                oauth_initial_token, client_id, client_secret, redirect_uri
-            )
+            run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
     else:
         st.header("Welcome to Your Spotify Dashboard 👋")
 
@@ -762,6 +760,4 @@ else:
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
 
-    run_app(
-        oauth_initial_token, client_id, client_secret, redirect_uri
-    )
+    run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
