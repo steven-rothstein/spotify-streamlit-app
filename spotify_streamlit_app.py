@@ -671,6 +671,24 @@ def run_app_contents(access_token):
             st.success(no_recs_str)
 
 
+def generate_centered_div(html_element, text, html_element_attr=None):
+    html_element_start = html_element + (
+        f" {html_element_attr}" if html_element_attr else ""
+    )
+
+    return f"""
+<div style="text-align: center;">
+    <{html_element_start}>{text}</{html_element}>
+</div>"""
+
+
+def st_write_centered_text(html_element, text, html_element_attr=None):
+    st.markdown(
+        generate_centered_div(html_element, text, html_element_attr),
+        unsafe_allow_html=True,
+    )
+
+
 query_params = st.experimental_get_query_params()
 code_str = "code"
 
@@ -742,20 +760,63 @@ if code_str not in query_params:
 
             run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
     else:
-        st.header("Welcome to Your Spotify Dashboard 👋")
+        st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
 
-        st.write("First things first, let's get you signed in.")
+        st_write_centered_text(
+            "p",
+            """
+This Streamlit app works with the Spotify API to surface some insights on your music preferences.
+
+**All data is directly surfaced from the Spotify Web API.**
+
+Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
+
+**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will also be logged out of the Spotify web app of your browser simultaneously.
+
+**Are you ready to see your data?**""",
+        )
+
+        rounded_button_class_raw = "rounded-button"
+        rounded_button_class = f".{rounded_button_class_raw}"
 
         st.markdown(
             f"""
-<a href="{oath_token_url}" target = "_self"> 
-    Click here to temporarily be redirected to Spotify's login page
-</a>
+<style>
+    /* Styling for the button */
+    {rounded_button_class} {{
+        display: inline-block;
+        padding: 10px 20px;
+        border-radius: 10px;
+        background-color: #4CAF50; /* Green background color */
+        color: white !important; /* White text color */
+        text-align: center;
+        text-decoration: none;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }}
+
+    /* Hover effect */
+    {rounded_button_class}:hover {{
+        background-color: #45a049; /* Darker green on hover */
+        color: white !important;
+    }}
+
+    /* Override default link styles */
+    {rounded_button_class}:link, {rounded_button_class}:visited, {rounded_button_class}:hover, {rounded_button_class}:active {{
+        color: white !important;
+        text-decoration: none;
+    }}
+</style>
+{generate_centered_div("a", "Let's go!", f'href="{oath_token_url}" class="{rounded_button_class_raw}" target = "_self"')}
 """,
             unsafe_allow_html=True,
         )
 else:
     oauth_initial_token = query_params[code_str][0]
+
+    # Does not rerun the page
+    st.experimental_set_query_params()
 
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
