@@ -319,109 +319,42 @@ def generate_style_and_div_blocks(
     )
 
 
-query_params = st.experimental_get_query_params()
-code_str = "code"
+def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
+    # Set up for the API call to retrieve an access token
+    base64_encoding = "ascii"
+    content_type_dictionary = {"Content-Type": "application/x-www-form-urlencoded"}
 
-if code_str not in query_params:
-    st.header("Welcome to Your Spotify Dashboard 👋")
+    # Headers with Base64 auth encoding
+    get_bearer_token_headers = {
+        "Authorization": "Basic "
+        + base64.b64encode(
+            f"{client_id}:{client_secret}".encode(base64_encoding)
+        ).decode(base64_encoding)
+    } | content_type_dictionary
 
-    st.write("First things first, let's get you signed in.")
+    # Payload
+    get_bearer_token_payload = {
+        "grant_type": "authorization_code",
+        "code": oauth_initial_token,
+        "redirect_uri": redirect_uri,
+    }
 
-    st.markdown(
-        """
-<a href="https://google.com" target = "_self"> 
-    Click here to temporarily be redirected to Spotify's login page
-</a>
-""",
-        unsafe_allow_html=True,
+    # HTTP POST
+    get_bearer_token_response = requests.post(
+        f"{spotify_accounts_endpoint}api/token",
+        headers=get_bearer_token_headers,
+        data=get_bearer_token_payload,
     )
-else:
-    # Set the default layout for the frontend
-    st.set_page_config(layout="wide")
 
-    scopes = "user-read-private user-read-email playlist-read-private user-follow-read user-top-read user-read-recently-played user-library-read"
+    # Crash on error (no automated data pipelines to disrupt here...)
+    get_bearer_token_response.raise_for_status()
 
-    if use_selenium:
-        # Get the app and user credentials from the YAML file
-        # Note: this application is meant for local use only.
-        # Never publish or give out your credentials, or leave them unencrypted in an untrusted location.
-        with open("config/config.yml", "r") as file:
-            config_contents = yaml.safe_load(file)
+    # Read the resulting JSON and retrieve your access token!
+    get_bearer_token_response_json = get_bearer_token_response.json()
+    run_app_contents(get_bearer_token_response_json["access_token"])
 
-        config_contents_creds = config_contents["creds"]
 
-        client_id = config_contents_creds["client_id"]
-        client_secret = config_contents_creds["client_secret"]
-        redirect_uri = config_contents["redirect_uri"]
-
-    oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
-
-    with st.spinner("Authorizing..."):
-        # Install the web driver
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-
-        # Load the page and enter the username and password
-        driver.get(oath_token_url)
-
-        username_input = driver.find_element("id", "login-username")
-        username_input.send_keys(config_contents_creds["username"])
-
-        password_input = driver.find_element("id", "login-password")
-        password_input.send_keys(config_contents_creds["password"])
-
-        login_button = driver.find_element("id", "login-button")
-        login_button.click()
-
-        # If needed, click the proper "Accept" button to proceed to the next page
-        if driver.current_url.startswith(f"{spotify_accounts_endpoint}en/authorize?"):
-            agree_button = driver.find_element(
-                "xpath", '//button[@data-testid="auth-accept"]'
-            )
-            agree_button.click()
-
-        # Sleep to ensure the page loads
-        time.sleep(2)
-
-        # Finally, obtain the oauth initial token
-        oauth_initial_token = driver.current_url.replace(f"{redirect_uri}/?code=", "")
-
-        # Quit out of selenium-based items
-        driver.close()
-        driver.quit()
-
-        # Set up for the API call to retrieve an access token
-        base64_encoding = "ascii"
-        content_type_dictionary = {"Content-Type": "application/x-www-form-urlencoded"}
-
-        # Headers with Base64 auth encoding
-        get_bearer_token_headers = {
-            "Authorization": "Basic "
-            + base64.b64encode(
-                f"{client_id}:{client_secret}".encode(base64_encoding)
-            ).decode(base64_encoding)
-        } | content_type_dictionary
-
-        # Payload
-        get_bearer_token_payload = {
-            "grant_type": "authorization_code",
-            "code": oauth_initial_token,
-            "redirect_uri": redirect_uri,
-        }
-
-        # HTTP POST
-        get_bearer_token_response = requests.post(
-            f"{spotify_accounts_endpoint}api/token",
-            headers=get_bearer_token_headers,
-            data=get_bearer_token_payload,
-        )
-
-        # Crash on error (no automated data pipelines to disrupt here...)
-        get_bearer_token_response.raise_for_status()
-
-        # Read the resulting JSON and retrieve your access token!
-        get_bearer_token_response_json = get_bearer_token_response.json()
-        access_token = get_bearer_token_response_json["access_token"]
-
+def run_app_contents(access_token):
     # API call happens here
     my_tracks = spotify_get_all_results(
         access_token,
@@ -464,6 +397,8 @@ else:
             }
         )
     )
+
+    st.link_button("Logout", "https://spotify.com/logout", type = "primary")
 
     my_px_color_theme = px.colors.sequential.Sunset
 
@@ -565,9 +500,9 @@ else:
 
             my_top_tracks_with_artist_and_album_img = pd.merge(
                 my_top_tracks_with_artist,
-                my_top_tracks_album_images[my_top_tracks_album_images[height_str] == 300][
-                    [track_id_str, url_str]
-                ].reset_index()[[track_id_str, url_str]],
+                my_top_tracks_album_images[
+                    my_top_tracks_album_images[height_str] == 300
+                ][[track_id_str, url_str]].reset_index()[[track_id_str, url_str]],
                 on=track_id_str,
             )
 
@@ -592,7 +527,6 @@ else:
                     unsafe_allow_html=True,
                 )
 
-
     top_tracks_bcols = list(st.columns(3))
     for top_track_bcol_index in range(len(top_tracks_bcols)):
         top_track_bcol = top_tracks_bcols[top_track_bcol_index]
@@ -610,7 +544,6 @@ else:
                 use_container_width=True,
                 hide_index=True,
             )
-
 
     artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
     max_artists_per_section = 50
@@ -676,7 +609,9 @@ else:
         indicator=True,
     )[my_left_cols + [name_y_str, url_y_str, merge_str]]
 
-    unfollow_artist_rec_rows_to_retrieve = my_followed_and_liked_artists_df[name_str].isna()
+    unfollow_artist_rec_rows_to_retrieve = my_followed_and_liked_artists_df[
+        name_str
+    ].isna()
     unfollow_artist_rec_replace_vals = my_followed_and_liked_artists_df.loc[
         unfollow_artist_rec_rows_to_retrieve, [name_y_str, url_y_str]
     ]
@@ -734,3 +669,99 @@ else:
                 )
         else:
             st.success(no_recs_str)
+
+
+query_params = st.experimental_get_query_params()
+code_str = "code"
+
+scopes = "user-read-private user-read-email playlist-read-private user-follow-read user-top-read user-read-recently-played user-library-read"
+client_id_str = "client_id"
+client_secret_str = "client_secret"
+redirect_uri_str = "redirect_uri"
+
+if use_selenium:
+    # Get the app and user credentials from the YAML file
+    # Note: this application is meant for local use only.
+    # Never publish or give out your credentials, or leave them unencrypted in an untrusted location.
+    with open("config/config.yml", "r") as file:
+        config_contents = yaml.safe_load(file)
+
+    config_contents_creds = config_contents["creds"]
+
+    client_id = config_contents_creds[client_id_str]
+    client_secret = config_contents_creds[client_secret_str]
+    redirect_uri = config_contents[redirect_uri_str]
+else:
+    client_id = st.secrets[client_id_str]
+    client_secret = st.secrets[client_secret_str]
+    redirect_uri = st.secrets[redirect_uri_str]
+
+if code_str not in query_params:
+    oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
+
+    if use_selenium:
+        # Set the default layout for the frontend
+        st.set_page_config(layout="wide")
+
+        with st.spinner("Authorizing..."):
+            # Install the web driver
+            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+
+            # Load the page and enter the username and password
+            driver.get(oath_token_url)
+
+            username_input = driver.find_element("id", "login-username")
+            username_input.send_keys(config_contents_creds["username"])
+
+            password_input = driver.find_element("id", "login-password")
+            password_input.send_keys(config_contents_creds["password"])
+
+            login_button = driver.find_element("id", "login-button")
+            login_button.click()
+
+            # If needed, click the proper "Accept" button to proceed to the next page
+            if driver.current_url.startswith(
+                f"{spotify_accounts_endpoint}en/authorize?"
+            ):
+                agree_button = driver.find_element(
+                    "xpath", '//button[@data-testid="auth-accept"]'
+                )
+                agree_button.click()
+
+            # Sleep to ensure the page loads
+            time.sleep(2)
+
+            # Finally, obtain the oauth initial token
+            oauth_initial_token = driver.current_url.replace(
+                f"{redirect_uri}/?code=", ""
+            )
+
+            # Quit out of selenium-based items
+            driver.close()
+            driver.quit()
+
+            run_app(
+                oauth_initial_token, client_id, client_secret, redirect_uri
+            )
+    else:
+        st.header("Welcome to Your Spotify Dashboard 👋")
+
+        st.write("First things first, let's get you signed in.")
+
+        st.markdown(
+            f"""
+<a href="{oath_token_url}" target = "_self"> 
+    Click here to temporarily be redirected to Spotify's login page
+</a>
+""",
+            unsafe_allow_html=True,
+        )
+else:
+    oauth_initial_token = query_params[code_str][0]
+
+    # Set the default layout for the frontend
+    st.set_page_config(layout="wide")
+
+    run_app(
+        oauth_initial_token, client_id, client_secret, redirect_uri
+    )
