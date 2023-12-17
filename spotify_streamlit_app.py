@@ -1,6 +1,5 @@
 import json
 import requests
-import jmespath
 import base64
 
 import numpy as np
