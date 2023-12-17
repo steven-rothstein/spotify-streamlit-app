@@ -806,7 +806,7 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
         text-decoration: none;
     }}
 </style>
-{generate_centered_div("a", "Let's go!", f'href="{oath_token_url}" class="{rounded_button_class_raw}" target = "_self"')}
+{generate_centered_div("a", "Let's go!", f'href="{oath_token_url}" class="{rounded_button_class_raw}"')}
 """,
             unsafe_allow_html=True,
         )
