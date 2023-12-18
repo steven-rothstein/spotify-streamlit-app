@@ -416,7 +416,7 @@ def run_app_contents(access_token):
         textangle=0, textposition="outside", cliponaxis=False
     )
     px_top_artists_by_track_count.update_coloraxes(showscale=False)
-    px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
+    px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=0, t=30, b=80))
 
     px_displaybarconfig = {"displayModeBar": False}
 
@@ -756,7 +756,7 @@ if code_str not in query_params:
             driver.close()
             driver.quit()
 
-            run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
+        run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
     else:
         st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
 
