@@ -416,7 +416,7 @@ def run_app_contents(access_token):
         textangle=0, textposition="outside", cliponaxis=False
     )
     px_top_artists_by_track_count.update_coloraxes(showscale=False)
-    px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=0, t=30, b=80))
+    # px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=0, t=30, b=80))
 
     px_displaybarconfig = {"displayModeBar": False}
 
