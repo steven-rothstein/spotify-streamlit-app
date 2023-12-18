@@ -333,7 +333,7 @@ def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     # Payload
     get_bearer_token_payload = {
         "grant_type": "authorization_code",
-        "code": oauth_initial_token,
+        "code": initial_oauth_token,
         "redirect_uri": redirect_uri,
     }
 
