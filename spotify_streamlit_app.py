@@ -398,53 +398,53 @@ def run_app_contents(access_token):
 
     st.link_button("Logout", "https://spotify.com/logout", type="primary")
 
-    my_px_color_theme = px.colors.sequential.Sunset
+    # my_px_color_theme = px.colors.sequential.Sunset
 
-    px_top_artists_by_track_count = px.bar(
-        num_tracks_per_artist.head(num_top_artists).sort_values(
-            count_track_id_str, ascending=True
+    # px_top_artists_by_track_count = px.bar(
+    #     num_tracks_per_artist.head(num_top_artists).sort_values(
+    #         count_track_id_str, ascending=True
+    #     ),
+    #     x=count_track_id_str,
+    #     y=name_str,
+    #     text_auto=True,
+    #     orientation="h",
+    #     color_continuous_scale=my_px_color_theme,
+    #     color=count_track_id_str,
+    #     labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
+    # )
+    # px_top_artists_by_track_count.update_traces(
+    #     textangle=0, textposition="outside", cliponaxis=False
+    # )
+    # px_top_artists_by_track_count.update_coloraxes(showscale=False)
+    # px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
+
+    # px_displaybarconfig = {"displayModeBar": False}
+
+    # topcol1, topcol2 = st.columns(2)
+
+    # with topcol1:
+    #     st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
+    #     st.plotly_chart(
+    #         px_top_artists_by_track_count,
+    #         use_container_width=True,
+    #         config=px_displaybarconfig,
+    #     )
+
+    # with topcol2:
+    st.subheader("All Artists and Liked Track Counts")
+    st.dataframe(
+        num_tracks_per_artist[
+            [name_str, count_track_id_str, max_added_at_ymd_str]
+        ].rename(
+            columns={
+                name_str: artist_str,
+                count_track_id_str: num_liked_tracks_str,
+                max_added_at_ymd_str: last_liked_date_str,
+            }
         ),
-        x=count_track_id_str,
-        y=name_str,
-        text_auto=True,
-        orientation="h",
-        color_continuous_scale=my_px_color_theme,
-        color=count_track_id_str,
-        labels={name_str: artist_str, count_track_id_str: num_liked_tracks_str},
+        use_container_width=True,
+        hide_index=True,
     )
-    px_top_artists_by_track_count.update_traces(
-        textangle=0, textposition="outside", cliponaxis=False
-    )
-    px_top_artists_by_track_count.update_coloraxes(showscale=False)
-    px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
-
-    px_displaybarconfig = {"displayModeBar": False}
-
-    topcol1, topcol2 = st.columns(2)
-
-    with topcol1:
-        st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
-        st.plotly_chart(
-            px_top_artists_by_track_count,
-            use_container_width=True,
-            config=px_displaybarconfig,
-        )
-
-    with topcol2:
-        st.subheader("All Artists and Liked Track Counts")
-        st.dataframe(
-            num_tracks_per_artist[
-                [name_str, count_track_id_str, max_added_at_ymd_str]
-            ].rename(
-                columns={
-                    name_str: artist_str,
-                    count_track_id_str: num_liked_tracks_str,
-                    max_added_at_ymd_str: last_liked_date_str,
-                }
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
 
     bcols = list(st.columns(3))
     term_str = "term"
@@ -769,7 +769,7 @@ This Streamlit app works with the Spotify API to surface some insights on your m
 
 Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
 
-**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will also be logged out of the Spotify web app of your browser simultaneously.
+**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.
 
 **Are you ready to see your data?**""",
         )
