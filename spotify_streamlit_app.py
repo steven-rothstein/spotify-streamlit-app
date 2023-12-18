@@ -416,7 +416,7 @@ def run_app_contents(access_token):
         textangle=0, textposition="outside", cliponaxis=False
     )
     px_top_artists_by_track_count.update_coloraxes(showscale=False)
-    # px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=0, t=30, b=80))
+    px_top_artists_by_track_count.update_layout(margin=dict(l=10, r=10, t=30, b=80))
 
     px_displaybarconfig = {"displayModeBar": False}
 
@@ -424,10 +424,23 @@ def run_app_contents(access_token):
 
     with topcol1:
         st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
-        st.plotly_chart(
-            px_top_artists_by_track_count,
+        # st.plotly_chart(
+        #     px_top_artists_by_track_count,
+        #     use_container_width=True,
+        #     config=px_displaybarconfig,
+        # )
+        st.dataframe(
+            num_tracks_per_artist[
+                [name_str, count_track_id_str, max_added_at_ymd_str]
+            ].rename(
+                columns={
+                    name_str: artist_str,
+                    count_track_id_str: num_liked_tracks_str,
+                    max_added_at_ymd_str: last_liked_date_str,
+                }
+            ),
             use_container_width=True,
-            config=px_displaybarconfig,
+            hide_index=True,
         )
 
     with topcol2:
