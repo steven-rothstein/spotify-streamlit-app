@@ -11,16 +11,6 @@ import streamlit as st
 
 import sys
 
-clargs = sys.argv
-use_selenium = False
-if (len(clargs) == 2) and (clargs[1] == "selenium"):
-    use_selenium = True
-
-    import yaml
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
-
 # pd.set_option("display.max_columns", None)
 # pd.set_option("display.max_rows", 600)
 
@@ -420,17 +410,6 @@ def run_app_contents(access_token):
 
     # px_displaybarconfig = {"displayModeBar": False}
 
-    # topcol1, topcol2 = st.columns(2)
-
-    # with topcol1:
-    #     st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
-    #     st.plotly_chart(
-    #         px_top_artists_by_track_count,
-    #         use_container_width=True,
-    #         config=px_displaybarconfig,
-    #     )
-
-    # with topcol2:
     st.subheader("All Artists and Liked Track Counts")
     st.dataframe(
         num_tracks_per_artist[
@@ -438,10 +417,18 @@ def run_app_contents(access_token):
         ].rename(
             columns={
                 name_str: artist_str,
-                count_track_id_str: num_liked_tracks_str,
                 max_added_at_ymd_str: last_liked_date_str,
             }
         ),
+        column_config={
+            count_track_id_str: st.column_config.ProgressColumn(
+                num_liked_tracks_str,
+                width=None,
+                min_value=0,
+                format="%d",
+                max_value=num_tracks_per_artist[count_track_id_str].max().item(),
+            ),
+        },
         use_container_width=True,
         hide_index=True,
     )
@@ -525,23 +512,23 @@ def run_app_contents(access_token):
                     unsafe_allow_html=True,
                 )
 
-    top_tracks_bcols = list(st.columns(3))
-    for top_track_bcol_index in range(len(top_tracks_bcols)):
-        top_track_bcol = top_tracks_bcols[top_track_bcol_index]
-        with top_track_bcol:
-            st.dataframe(
-                my_top_tracks_dataframes[top_track_bcol_index][
-                    [track_rank_str, track_name_str, primary_artist_name_str]
-                ].rename(
-                    columns={
-                        track_rank_str: rank_str.title(),
-                        track_name_str: "Track",
-                        primary_artist_name_str: artist_str,
-                    }
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+    # top_tracks_bcols = list(st.columns(3))
+    # for top_track_bcol_index in range(len(top_tracks_bcols)):
+    #     top_track_bcol = top_tracks_bcols[top_track_bcol_index]
+    #     with top_track_bcol:
+    #         st.dataframe(
+    #             my_top_tracks_dataframes[top_track_bcol_index][
+    #                 [track_rank_str, track_name_str, primary_artist_name_str]
+    #             ].rename(
+    #                 columns={
+    #                     track_rank_str: rank_str.title(),
+    #                     track_name_str: "Track",
+    #                     primary_artist_name_str: artist_str,
+    #                 }
+    #             ),
+    #             use_container_width=True,
+    #             hide_index=True,
+    #         )
 
     artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
     max_artists_per_section = 50
@@ -695,90 +682,32 @@ client_id_str = "client_id"
 client_secret_str = "client_secret"
 redirect_uri_str = "redirect_uri"
 
-if use_selenium:
-    # Get the app and user credentials from the YAML file
-    # Note: this application is meant for local use only.
-    # Never publish or give out your credentials, or leave them unencrypted in an untrusted location.
-    with open("config/config.yml", "r") as file:
-        config_contents = yaml.safe_load(file)
-
-    config_contents_creds = config_contents["creds"]
-
-    client_id = config_contents_creds[client_id_str]
-    client_secret = config_contents_creds[client_secret_str]
-    redirect_uri = config_contents[redirect_uri_str]
-else:
-    client_id = st.secrets[client_id_str]
-    client_secret = st.secrets[client_secret_str]
-    redirect_uri = st.secrets[redirect_uri_str]
+client_id = st.secrets[client_id_str]
+client_secret = st.secrets[client_secret_str]
+redirect_uri = st.secrets[redirect_uri_str]
 
 if code_str not in query_params:
     oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
 
-    if use_selenium:
-        # Set the default layout for the frontend
-        st.set_page_config(layout="wide")
+    st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
 
-        with st.spinner("Authorizing..."):
-            # Install the web driver
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-
-            # Load the page and enter the username and password
-            driver.get(oath_token_url)
-
-            username_input = driver.find_element("id", "login-username")
-            username_input.send_keys(config_contents_creds["username"])
-
-            password_input = driver.find_element("id", "login-password")
-            password_input.send_keys(config_contents_creds["password"])
-
-            login_button = driver.find_element("id", "login-button")
-            login_button.click()
-
-            # If needed, click the proper "Accept" button to proceed to the next page
-            if driver.current_url.startswith(
-                f"{spotify_accounts_endpoint}en/authorize?"
-            ):
-                agree_button = driver.find_element(
-                    "xpath", '//button[@data-testid="auth-accept"]'
-                )
-                agree_button.click()
-
-            # Sleep to ensure the page loads
-            time.sleep(2)
-
-            # Finally, obtain the oauth initial token
-            oauth_initial_token = driver.current_url.replace(
-                f"{redirect_uri}/?code=", ""
-            )
-
-            # Quit out of selenium-based items
-            driver.close()
-            driver.quit()
-
-        run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
-    else:
-        st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
-
-        st_write_centered_text(
-            "p",
-            """
-This Streamlit app works with the Spotify API to surface some insights on your music preferences.
-
-**All data is directly surfaced from the Spotify Web API.**
+    st_write_centered_text(
+        "p",
+        """
+This Streamlit app works directly and exclusively with the Spotify API to surface some insights on your music preferences.
 
 Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
 
-**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.
+**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.""",
+    )
 
-**Are you ready to see your data?**""",
-        )
+    st_write_centered_text("h5", "Are you ready to see your data?")
 
-        rounded_button_class_raw = "rounded-button"
-        rounded_button_class = f".{rounded_button_class_raw}"
+    rounded_button_class_raw = "rounded-button"
+    rounded_button_class = f".{rounded_button_class_raw}"
 
-        st.markdown(
-            f"""
+    st.markdown(
+        f"""
 <style>
     /* Styling for the button */
     {rounded_button_class} {{
@@ -808,8 +737,8 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 </style>
 {generate_centered_div("a", "Let's go!", f'href="{oath_token_url}" class="{rounded_button_class_raw}"')}
 """,
-            unsafe_allow_html=True,
-        )
+        unsafe_allow_html=True,
+    )
 else:
     oauth_initial_token = query_params[code_str][0]
 
