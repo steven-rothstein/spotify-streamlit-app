@@ -525,23 +525,23 @@ def run_app_contents(access_token):
                     unsafe_allow_html=True,
                 )
 
-    top_tracks_bcols = list(st.columns(3))
-    for top_track_bcol_index in range(len(top_tracks_bcols)):
-        top_track_bcol = top_tracks_bcols[top_track_bcol_index]
-        with top_track_bcol:
-            st.dataframe(
-                my_top_tracks_dataframes[top_track_bcol_index][
-                    [track_rank_str, track_name_str, primary_artist_name_str]
-                ].rename(
-                    columns={
-                        track_rank_str: rank_str.title(),
-                        track_name_str: "Track",
-                        primary_artist_name_str: artist_str,
-                    }
-                ),
-                use_container_width=True,
-                hide_index=True,
-            )
+    # top_tracks_bcols = list(st.columns(3))
+    # for top_track_bcol_index in range(len(top_tracks_bcols)):
+    #     top_track_bcol = top_tracks_bcols[top_track_bcol_index]
+    #     with top_track_bcol:
+    #         st.dataframe(
+    #             my_top_tracks_dataframes[top_track_bcol_index][
+    #                 [track_rank_str, track_name_str, primary_artist_name_str]
+    #             ].rename(
+    #                 columns={
+    #                     track_rank_str: rank_str.title(),
+    #                     track_name_str: "Track",
+    #                     primary_artist_name_str: artist_str,
+    #                 }
+    #             ),
+    #             use_container_width=True,
+    #             hide_index=True,
+    #         )
 
     artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
     max_artists_per_section = 50
