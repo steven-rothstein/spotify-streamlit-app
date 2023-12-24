@@ -15,6 +15,8 @@ import sys
 # pd.set_option("display.max_columns", None)
 # pd.set_option("display.max_rows", 600)
 
+# Variable setup
+
 track_str = "track"
 track_id_str = f"{track_str}_id"
 
@@ -91,12 +93,14 @@ def convert_json_col_to_dataframe_with_key(df, id_col_names, json_col_name):
 
 # Convenience function to call the Spotify API
 # Args:
-# access_token: the token retrieved through Oauth 2.0
+# access_token: the token retrieved through OAuth 2.0
 # endpoint: the Spotify endpoint to hit
 # content_type: a string of the value to pass to the API Content-Type header
 # query: a dictionary of key value pairs to send via the API. Defaulted to an empty dictionary if not needed.
 # max_parse_level: passed to pd.normalize and controls how JSON is flattened. The default, 0, ensures max flattening.
 # base_obj: a string to pass if the returned JSON is wrapped in a tag. Used to filter out the tag for parsing efficiency.
+# balloons: a Boolean to control if Streamlit balloons should show after API call completion.
+# paginated: a Boolean to indicate if pagination is part of the API call.
 def spotify_get_all_results(
     access_token,
     endpoint,
@@ -138,7 +142,7 @@ def spotify_get_all_results(
             # TODO convert to JMESPath if more complex use cases arise
             api_request_json = api_request_json[base_obj]
 
-        # If the first call, determine how many pages of data the API will have to retrieve.
+        # If paginated and the first call, determine how many pages of data the API will have to retrieve.
         # Use this calculation to create a progress bar to display.
         if paginated and first_call:
             num_pages = int(
@@ -150,6 +154,7 @@ def spotify_get_all_results(
             progress_bar = st.progress(curr_page_num, text="Loading...")
 
         # Get the next endpoint to call, and convert the current JSON response to a DataFrame.
+        # End the loop if paginated by setting "next" to None.
         next_api_url = api_request_json["next"] if paginated else None
 
         retVal_list.append(
@@ -159,6 +164,7 @@ def spotify_get_all_results(
             )
         )
 
+        # Update the progress bar for paginated queries
         if paginated:
             curr_page_num += 1
 
@@ -168,10 +174,12 @@ def spotify_get_all_results(
                 text=f"Loaded Page: {curr_page_num} of {num_pages}",
             )
 
+    # Clear the progress bar for paginated queries
     if paginated:
         # When processing is complete, stop showing the progress bar
         progress_bar.empty()
 
+    # Potentially show balloons
     if balloons:
         st.balloons()
 
@@ -179,6 +187,9 @@ def spotify_get_all_results(
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
+# description
+# Args:
+# df:
 def spotify_unroll_image_helper(df):
     my_image_size = 320
     df_imgs = convert_json_col_to_dataframe_with_key(
@@ -207,6 +218,9 @@ def spotify_unroll_image_helper(df):
     return df_imgs
 
 
+# description
+# Args:
+# df:
 def generate_html_style_code(img_size_px, style_tag_suffix):
     return f"""
 <style>
@@ -257,6 +271,9 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
 </style>"""
 
 
+# description
+# Args:
+# df:
 def generate_div_block(
     style_tag_suffix,
     img_src_holder_str,
@@ -287,6 +304,9 @@ def generate_div_block(
     return div_start + div_num_container + div_main_containers
 
 
+# description
+# Args:
+# df:
 def generate_style_and_div_blocks(
     img_size_px,
     style_tag_suffix,
@@ -308,6 +328,9 @@ def generate_style_and_div_blocks(
     )
 
 
+# description
+# Args:
+# df:
 def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     # Set up for the API call to retrieve an access token
     base64_encoding = "ascii"
@@ -343,6 +366,9 @@ def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     run_app_contents(get_bearer_token_response_json["access_token"])
 
 
+# description
+# Args:
+# df:
 def run_app_contents(access_token):
     # API call happens here
     my_tracks = spotify_get_all_results(
@@ -657,6 +683,9 @@ def run_app_contents(access_token):
             st.success(no_recs_str)
 
 
+# description
+# Args:
+# df:
 def generate_centered_div(html_element, text, html_element_attr=None):
     html_element_start = html_element + (
         f" {html_element_attr}" if html_element_attr else ""
@@ -668,6 +697,9 @@ def generate_centered_div(html_element, text, html_element_attr=None):
 </div>"""
 
 
+# description
+# Args:
+# df:
 def st_write_centered_text(html_element, text, html_element_attr=None):
     st.markdown(
         generate_centered_div(html_element, text, html_element_attr),
