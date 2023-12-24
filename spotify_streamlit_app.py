@@ -277,9 +277,13 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
 </style>"""
 
 
-# description
+# Function to generate the div block that goes along with images in the app
 # Args:
-# df:
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
+# img_src_holder_str: the image URL
+# strong_txt_holder_str: text for line 1 to the right of the image
+# p_txt_holder_str: text for line 2 to the right of the image
+# b_txt_holder_str: text to the left of the image
 def generate_div_block(
     style_tag_suffix,
     img_src_holder_str,
@@ -310,9 +314,14 @@ def generate_div_block(
     return div_start + div_num_container + div_main_containers
 
 
-# description
+# Utility function to generate the style and div blocks together.
 # Args:
-# df:
+# img_size_px: size in pixels for the image
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
+# img_src_holder_str: the image URL
+# strong_txt_holder_str: text for line 1 to the right of the image
+# p_txt_holder_str: text for line 2 to the right of the image
+# b_txt_holder_str: text to the left of the image
 def generate_style_and_div_blocks(
     img_size_px,
     style_tag_suffix,
@@ -334,21 +343,24 @@ def generate_style_and_div_blocks(
     )
 
 
-# description
+# Where the real magic starts. Retrieves an access token and runs the rest of the app.
 # Args:
-# df:
+# initial_oauth_token: the OAuth 2.0 token
+# client_id: Spotify client ID
+# client_secret: Spotify client secret
+# redirect_uri: OAuth 2.0 redirect uri
 def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     # Set up for the API call to retrieve an access token
     base64_encoding = "ascii"
-    content_type_dictionary = {"Content-Type": "application/x-www-form-urlencoded"}
 
     # Headers with Base64 auth encoding
     get_bearer_token_headers = {
         "Authorization": "Basic "
         + base64.b64encode(
             f"{client_id}:{client_secret}".encode(base64_encoding)
-        ).decode(base64_encoding)
-    } | content_type_dictionary
+        ).decode(base64_encoding),
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
 
     # Payload
     get_bearer_token_payload = {
@@ -711,6 +723,7 @@ def st_write_centered_text(html_element, text, html_element_attr=None):
         generate_centered_div(html_element, text, html_element_attr),
         unsafe_allow_html=True,
     )
+
 
 # Get the query parameters of the URL in the browser
 query_params = st.experimental_get_query_params()
