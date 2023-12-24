@@ -763,9 +763,7 @@ if code_str not in query_params:
         st_write_centered_text(
             "p",
             """
-This Streamlit app works with the Spotify API to surface some insights on your music preferences.
-
-**All data is directly surfaced from the Spotify Web API.**
+This Streamlit app works directly and exclusively with the Spotify API to surface some insights on your music preferences.
 
 Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
 
