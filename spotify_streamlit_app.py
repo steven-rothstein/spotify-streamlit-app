@@ -410,17 +410,6 @@ def run_app_contents(access_token):
 
     # px_displaybarconfig = {"displayModeBar": False}
 
-    # topcol1, topcol2 = st.columns(2)
-
-    # with topcol1:
-    #     st.subheader(f"Top {num_top_artists} Artists by Liked Track Count")
-    #     st.plotly_chart(
-    #         px_top_artists_by_track_count,
-    #         use_container_width=True,
-    #         config=px_displaybarconfig,
-    #     )
-
-    # with topcol2:
     st.subheader("All Artists and Liked Track Counts")
     st.dataframe(
         num_tracks_per_artist[
@@ -428,10 +417,18 @@ def run_app_contents(access_token):
         ].rename(
             columns={
                 name_str: artist_str,
-                count_track_id_str: num_liked_tracks_str,
                 max_added_at_ymd_str: last_liked_date_str,
             }
         ),
+        column_config={
+            count_track_id_str: st.column_config.ProgressColumn(
+                num_liked_tracks_str,
+                width=None,
+                min_value=0,
+                format="%d",
+                max_value=num_tracks_per_artist[count_track_id_str].max().item(),
+            ),
+        },
         use_container_width=True,
         hide_index=True,
     )
@@ -701,10 +698,10 @@ This Streamlit app works directly and exclusively with the Spotify API to surfac
 
 Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
 
-**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.
-
-**Are you ready to see your data?**""",
+**One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.""",
     )
+
+    st_write_centered_text("h5", "Are you ready to see your data?")
 
     rounded_button_class_raw = "rounded-button"
     rounded_button_class = f".{rounded_button_class_raw}"
