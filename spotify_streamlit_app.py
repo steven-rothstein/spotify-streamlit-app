@@ -187,9 +187,11 @@ def spotify_get_all_results(
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
-# description
+# Helper function to unroll image data held in JSON.
+# Looks for an "images" column and creates a DataFrame linking that unrolled JSON with the "id" column value for that row.
+# Returns arg `df` with a `url` column added with an image link from the above described processing.
 # Args:
-# df:
+# df: the DataFrame with the "images" column to unroll.
 def spotify_unroll_image_helper(df):
     my_image_size = 320
     df_imgs = convert_json_col_to_dataframe_with_key(
@@ -200,6 +202,7 @@ def spotify_unroll_image_helper(df):
 
     df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
 
+    # Drop the "height" column
     df_imgs.drop(height_str, axis=1, inplace=True)
 
     df_imgs = pd.merge(
@@ -209,18 +212,21 @@ def spotify_unroll_image_helper(df):
         on=id_str,
     )
 
+    # Fill NA URLs with a stock image
     df_imgs[url_str].fillna(
         "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
     )
 
+    # Drop the unrolled "images" column.
     df_imgs.drop(images_str, axis=1, inplace=True)
 
     return df_imgs
 
 
-# description
+# Generates HTML style code for images used in the app.
 # Args:
-# df:
+# img_size_px: size in pixels for the image
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
 def generate_html_style_code(img_size_px, style_tag_suffix):
     return f"""
 <style>
@@ -706,19 +712,22 @@ def st_write_centered_text(html_element, text, html_element_attr=None):
         unsafe_allow_html=True,
     )
 
-
+# Get the query parameters of the URL in the browser
 query_params = st.experimental_get_query_params()
-code_str = "code"
 
+# Variable setup
+code_str = "code"
 scopes = "user-read-private user-read-email playlist-read-private user-follow-read user-top-read user-read-recently-played user-library-read"
 client_id_str = "client_id"
 client_secret_str = "client_secret"
 redirect_uri_str = "redirect_uri"
 
+# Read from local secrets (when locally run) file or app secrets (when running deployed version).
 client_id = st.secrets[client_id_str]
 client_secret = st.secrets[client_secret_str]
 redirect_uri = st.secrets[redirect_uri_str]
 
+# If there is no OAuth 2.0 code in the query parameters, generate the Welcome screen.
 if code_str not in query_params:
     oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
 
@@ -739,6 +748,7 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
     rounded_button_class_raw = "rounded-button"
     rounded_button_class = f".{rounded_button_class_raw}"
 
+    # Set some CSS and HTML to center the elements (not supported in Streamlit natively)
     st.markdown(
         f"""
 <style>
@@ -772,13 +782,16 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 """,
         unsafe_allow_html=True,
     )
+# If there is an OAuth 2.0 code in the query parameters, run the analysis.
 else:
+    # Grab your token
     oauth_initial_token = query_params[code_str][0]
 
-    # Does not rerun the page
+    # Removes the query parameters from the browser URL and does not rerun the page
     st.experimental_set_query_params()
 
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
 
+    # Run the analysis!
     run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
