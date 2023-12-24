@@ -11,16 +11,6 @@ import streamlit as st
 
 import sys
 
-clargs = sys.argv
-use_selenium = False
-if (len(clargs) == 2) and (clargs[1] == "selenium"):
-    use_selenium = True
-
-    import yaml
-    from selenium import webdriver
-    from selenium.webdriver.chrome.service import Service
-    from webdriver_manager.chrome import ChromeDriverManager
-
 # pd.set_option("display.max_columns", None)
 # pd.set_option("display.max_rows", 600)
 
@@ -695,74 +685,18 @@ client_id_str = "client_id"
 client_secret_str = "client_secret"
 redirect_uri_str = "redirect_uri"
 
-if use_selenium:
-    # Get the app and user credentials from the YAML file
-    # Note: this application is meant for local use only.
-    # Never publish or give out your credentials, or leave them unencrypted in an untrusted location.
-    with open("config/config.yml", "r") as file:
-        config_contents = yaml.safe_load(file)
-
-    config_contents_creds = config_contents["creds"]
-
-    client_id = config_contents_creds[client_id_str]
-    client_secret = config_contents_creds[client_secret_str]
-    redirect_uri = config_contents[redirect_uri_str]
-else:
-    client_id = st.secrets[client_id_str]
-    client_secret = st.secrets[client_secret_str]
-    redirect_uri = st.secrets[redirect_uri_str]
+client_id = st.secrets[client_id_str]
+client_secret = st.secrets[client_secret_str]
+redirect_uri = st.secrets[redirect_uri_str]
 
 if code_str not in query_params:
     oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
 
-    if use_selenium:
-        # Set the default layout for the frontend
-        st.set_page_config(layout="wide")
+    st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
 
-        with st.spinner("Authorizing..."):
-            # Install the web driver
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-
-            # Load the page and enter the username and password
-            driver.get(oath_token_url)
-
-            username_input = driver.find_element("id", "login-username")
-            username_input.send_keys(config_contents_creds["username"])
-
-            password_input = driver.find_element("id", "login-password")
-            password_input.send_keys(config_contents_creds["password"])
-
-            login_button = driver.find_element("id", "login-button")
-            login_button.click()
-
-            # If needed, click the proper "Accept" button to proceed to the next page
-            if driver.current_url.startswith(
-                f"{spotify_accounts_endpoint}en/authorize?"
-            ):
-                agree_button = driver.find_element(
-                    "xpath", '//button[@data-testid="auth-accept"]'
-                )
-                agree_button.click()
-
-            # Sleep to ensure the page loads
-            time.sleep(2)
-
-            # Finally, obtain the oauth initial token
-            oauth_initial_token = driver.current_url.replace(
-                f"{redirect_uri}/?code=", ""
-            )
-
-            # Quit out of selenium-based items
-            driver.close()
-            driver.quit()
-
-        run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
-    else:
-        st_write_centered_text("h2", "Welcome to Your Spotify Dashboard 👋")
-
-        st_write_centered_text(
-            "p",
-            """
+    st_write_centered_text(
+        "p",
+        """
 This Streamlit app works directly and exclusively with the Spotify API to surface some insights on your music preferences.
 
 Now, let's get you signed in. Clicking the link at the bottom of this page will initiate the sign-in process. So, if you are logged into Spotify already in your browser, you won't need to enter your password again! Just click the link. If not, have no fear. You will be redirected to Spotify's login page and then brought back here.
@@ -770,13 +704,13 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 **One last note:** once you are in your dashboard, be sure to click the "logout" button when you are done. Refresh this page and your data will disappear from your session. You will remain logged in to the Spotify web app in your browser unless you explicitly log out.
 
 **Are you ready to see your data?**""",
-        )
+    )
 
-        rounded_button_class_raw = "rounded-button"
-        rounded_button_class = f".{rounded_button_class_raw}"
+    rounded_button_class_raw = "rounded-button"
+    rounded_button_class = f".{rounded_button_class_raw}"
 
-        st.markdown(
-            f"""
+    st.markdown(
+        f"""
 <style>
     /* Styling for the button */
     {rounded_button_class} {{
@@ -806,8 +740,8 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 </style>
 {generate_centered_div("a", "Let's go!", f'href="{oath_token_url}" class="{rounded_button_class_raw}"')}
 """,
-            unsafe_allow_html=True,
-        )
+        unsafe_allow_html=True,
+    )
 else:
     oauth_initial_token = query_params[code_str][0]
 
