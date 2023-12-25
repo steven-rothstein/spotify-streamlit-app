@@ -384,9 +384,9 @@ def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     run_app_contents(get_bearer_token_response_json["access_token"])
 
 
-# description
+# Pulls all the Spotify data and populates the Streamlit app
 # Args:
-# df:
+# access_token: the access token needed to call the Spotify API
 def run_app_contents(access_token):
     # API call happens here
     my_tracks = spotify_get_all_results(
@@ -403,6 +403,7 @@ def run_app_contents(access_token):
 
     my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 
+    # Unroll artist data
     track_artists_df = convert_json_col_to_dataframe_with_key(
         my_tracks, track_id_str, artists_str
     )
@@ -431,8 +432,10 @@ def run_app_contents(access_token):
         )
     )
 
+    # Create the logout button
     st.link_button("Logout", "https://spotify.com/logout", type="primary")
 
+    # Some plotly code that did not make the cut because it made the UX of mobile scrolling worse:
     # my_px_color_theme = px.colors.sequential.Sunset
 
     # px_top_artists_by_track_count = px.bar(
@@ -455,6 +458,7 @@ def run_app_contents(access_token):
 
     # px_displaybarconfig = {"displayModeBar": False}
 
+    # The top DataFrame to display
     st.subheader("All Artists and Liked Track Counts")
     st.dataframe(
         num_tracks_per_artist[
@@ -478,21 +482,26 @@ def run_app_contents(access_token):
         hide_index=True,
     )
 
+    # Short, medium, and long term tracks section
+
+    # Convert the tuple to a list
     bcols = list(st.columns(3))
+
     term_str = "term"
     underscore_term_str = f"_{term_str}"
     term_timeframes_friendly = ["short", "medium", "long"]
     term_timeframes = [f"{x}{underscore_term_str}" for x in term_timeframes_friendly]
 
-    my_top_tracks_dataframes = []
-
+    # For each of short/medium/long term track API calls, populate a Streamlit column with the data visualizations.
     for bcol_index in range(len(bcols)):
         bcol = bcols[bcol_index]
         with bcol:
+            # Subheader
             st.subheader(
                 f"My {term_timeframes_friendly[bcol_index]}-{term_str} Top Tracks".title()
             )
 
+            # API Call
             my_top_tracks = spotify_get_all_results(
                 access_token,
                 f"{spotify_api_endpoint}me/top/tracks",
@@ -500,7 +509,11 @@ def run_app_contents(access_token):
                 query={"time_range": term_timeframes[bcol_index]},
             ).rename(columns={id_str: track_id_str, name_str: track_name_str})
 
+            # Wrap each value in a list to use the helper functions easily.
             my_top_tracks[album_str] = my_top_tracks[album_str].apply(lambda x: [x])
+
+            # First, unwrap the "album" JSON.
+            # Next, unwrap the album.images JSON
             my_top_tracks_album_images = convert_json_col_to_dataframe_with_key(
                 convert_json_col_to_dataframe_with_key(
                     my_top_tracks, track_id_str, album_str
@@ -509,8 +522,12 @@ def run_app_contents(access_token):
                 images_str,
             )
 
+            # My Top Tracks come back sorted, so add a rank to each one.
             my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
 
+            # Bring in artist information
+            # Tracks can have more than 1 artist, so flatten the artist_name column so each is seperated by a "; ".
+            # We do so to have 1 row per track.
             my_top_tracks_with_artist = (
                 pd.merge(
                     my_top_tracks[[track_id_str, track_rank_str, track_name_str]],
@@ -528,22 +545,23 @@ def run_app_contents(access_token):
                 ]
             )
 
+            # Link back to each 300 px height album image
             my_top_tracks_with_artist_and_album_img = pd.merge(
                 my_top_tracks_with_artist,
                 my_top_tracks_album_images[
                     my_top_tracks_album_images[height_str] == 300
-                ][[track_id_str, url_str]].reset_index()[[track_id_str, url_str]],
+                ][[track_id_str, url_str]].reset_index(),
                 on=track_id_str,
             )
 
+            # Add a column for the first artist, if multiple
             my_top_tracks_with_artist_and_album_img[
                 primary_artist_name_str
             ] = my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
                 ";.+", "", regex=True
             )
 
-            my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
-
+            # For each row, generate the frontend html/css code and write it
             for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
                 st.markdown(
                     generate_style_and_div_blocks(
@@ -557,30 +575,13 @@ def run_app_contents(access_token):
                     unsafe_allow_html=True,
                 )
 
-    # top_tracks_bcols = list(st.columns(3))
-    # for top_track_bcol_index in range(len(top_tracks_bcols)):
-    #     top_track_bcol = top_tracks_bcols[top_track_bcol_index]
-    #     with top_track_bcol:
-    #         st.dataframe(
-    #             my_top_tracks_dataframes[top_track_bcol_index][
-    #                 [track_rank_str, track_name_str, primary_artist_name_str]
-    #             ].rename(
-    #                 columns={
-    #                     track_rank_str: rank_str.title(),
-    #                     track_name_str: "Track",
-    #                     primary_artist_name_str: artist_str,
-    #                 }
-    #             ),
-    #             use_container_width=True,
-    #             hide_index=True,
-    #         )
-
+    # Get unique artists whose tracks are liked
     artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
     max_artists_per_section = 50
 
     # Convert the pandas Series to a list. The endpoint can only handle 50 artists at a time.
     # Calculate the number of pages and split. Formula: ceiling(number of rows divided by the page limit).
-    # Collapse the list of strings by a comma.
+    # Collapse each list of strings by a comma.
     artist_ids_to_query_list = [
         ",".join(x)
         for x in np.array_split(
@@ -589,6 +590,7 @@ def run_app_contents(access_token):
         )
     ]
 
+    # Call the API for all artists in the list
     my_artists_list = []
     for artist_id_query_string in artist_ids_to_query_list:
         my_artists_list.append(
@@ -601,6 +603,8 @@ def run_app_contents(access_token):
                 paginated=False,
             )
         )
+
+    # Union the results and bring in liked tracks metadata, also retaining image data
     my_liked_artists = pd.merge(
         pd.concat(my_artists_list).reset_index(drop=True)[[id_str, images_str]],
         num_tracks_per_artist,
@@ -608,8 +612,10 @@ def run_app_contents(access_token):
         how="inner",
     )
 
+    # Get image URL for each artist appended to the DataFrame
     my_liked_artists_imgs = spotify_unroll_image_helper(my_liked_artists)
 
+    # Call the API for followed artist data
     my_followed_artists = spotify_get_all_results(
         access_token,
         f"{spotify_api_endpoint}me/following",
@@ -618,8 +624,10 @@ def run_app_contents(access_token):
         base_obj="artists",
     )
 
+    # Get image URL for each artist appended to the DataFrame
     my_followed_artists_imgs = spotify_unroll_image_helper(my_followed_artists)
 
+    # Perform an outer join between liked and followed artists
     my_left = my_liked_artists_imgs
     my_right = my_followed_artists_imgs
 
@@ -639,25 +647,34 @@ def run_app_contents(access_token):
         indicator=True,
     )[my_left_cols + [name_y_str, url_y_str, merge_str]]
 
+    # Look for rows where an artist is followed with no liked songs.
+    # "name" would be NA but "name_y" would not be.
     unfollow_artist_rec_rows_to_retrieve = my_followed_and_liked_artists_df[
         name_str
     ].isna()
+
+    # Get the name and URL for those rows
     unfollow_artist_rec_replace_vals = my_followed_and_liked_artists_df.loc[
         unfollow_artist_rec_rows_to_retrieve, [name_y_str, url_y_str]
     ]
 
+    # Replace "name" and "url" columns with the retrieved values
     my_followed_and_liked_artists_df.loc[
         unfollow_artist_rec_rows_to_retrieve, [name_str, url_str]
     ] = unfollow_artist_rec_replace_vals.values
 
+    # Remove extraneous columns
     my_followed_and_liked_artists_df = my_followed_and_liked_artists_df[
         my_left_cols + [merge_str]
     ]
 
+    # Start to populate follow/unfollow recommendations
     followrecscol, unfollowrecscol = st.columns(2)
-    no_recs_str = "No recommendations. You are on top of things!"
+    no_recs_str = "No recommendations. You're on top of things!"
     recs_img_size = 200
 
+    # Get artists with a liked song count >= 8 that are not followed, and present them via the visualization function.
+    # If no recommendations, show a success message.
     with followrecscol:
         st.subheader("Recommended Artists to Follow")
         to_iter = my_followed_and_liked_artists_df[
@@ -680,6 +697,8 @@ def run_app_contents(access_token):
         else:
             st.success(no_recs_str)
 
+    # Get artists with no liked songs that are followed, and present them via the visualization function.
+    # If no recommendations, show a success message.
     with unfollowrecscol:
         st.subheader("Recommended Artists to Unfollow")
         to_iter = my_followed_and_liked_artists_df[
@@ -701,9 +720,11 @@ def run_app_contents(access_token):
             st.success(no_recs_str)
 
 
-# description
+# Generates a simple horizontalled centered div
 # Args:
-# df:
+# html_element: the html component for inside the div
+# text: text to write
+# html_element_attr: attributes html syntax for the html_element
 def generate_centered_div(html_element, text, html_element_attr=None):
     html_element_start = html_element + (
         f" {html_element_attr}" if html_element_attr else ""
@@ -715,9 +736,11 @@ def generate_centered_div(html_element, text, html_element_attr=None):
 </div>"""
 
 
-# description
+# Streamlit wrapper to write a centered div
 # Args:
-# df:
+# html_element: the html component for inside the div
+# text: text to write
+# html_element_attr: attributes html syntax for the html_element
 def st_write_centered_text(html_element, text, html_element_attr=None):
     st.markdown(
         generate_centered_div(html_element, text, html_element_attr),
