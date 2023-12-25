@@ -829,5 +829,5 @@ else:
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
 
-    # Run the analysis!
+    # Run the analysis.
     run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
