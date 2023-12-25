@@ -15,6 +15,8 @@ import sys
 # pd.set_option("display.max_columns", None)
 # pd.set_option("display.max_rows", 600)
 
+# Variable setup
+
 track_str = "track"
 track_id_str = f"{track_str}_id"
 
@@ -91,12 +93,14 @@ def convert_json_col_to_dataframe_with_key(df, id_col_names, json_col_name):
 
 # Convenience function to call the Spotify API
 # Args:
-# access_token: the token retrieved through Oauth 2.0
+# access_token: the token retrieved through OAuth 2.0
 # endpoint: the Spotify endpoint to hit
 # content_type: a string of the value to pass to the API Content-Type header
 # query: a dictionary of key value pairs to send via the API. Defaulted to an empty dictionary if not needed.
 # max_parse_level: passed to pd.normalize and controls how JSON is flattened. The default, 0, ensures max flattening.
 # base_obj: a string to pass if the returned JSON is wrapped in a tag. Used to filter out the tag for parsing efficiency.
+# balloons: a Boolean to control if Streamlit balloons should show after API call completion.
+# paginated: a Boolean to indicate if pagination is part of the API call.
 def spotify_get_all_results(
     access_token,
     endpoint,
@@ -138,7 +142,7 @@ def spotify_get_all_results(
             # TODO convert to JMESPath if more complex use cases arise
             api_request_json = api_request_json[base_obj]
 
-        # If the first call, determine how many pages of data the API will have to retrieve.
+        # If paginated and the first call, determine how many pages of data the API will have to retrieve.
         # Use this calculation to create a progress bar to display.
         if paginated and first_call:
             num_pages = int(
@@ -150,6 +154,7 @@ def spotify_get_all_results(
             progress_bar = st.progress(curr_page_num, text="Loading...")
 
         # Get the next endpoint to call, and convert the current JSON response to a DataFrame.
+        # End the loop if paginated by setting "next" to None.
         next_api_url = api_request_json["next"] if paginated else None
 
         retVal_list.append(
@@ -159,6 +164,7 @@ def spotify_get_all_results(
             )
         )
 
+        # Update the progress bar for paginated queries
         if paginated:
             curr_page_num += 1
 
@@ -168,10 +174,12 @@ def spotify_get_all_results(
                 text=f"Loaded Page: {curr_page_num} of {num_pages}",
             )
 
+    # Clear the progress bar for paginated queries
     if paginated:
         # When processing is complete, stop showing the progress bar
         progress_bar.empty()
 
+    # Potentially show balloons
     if balloons:
         st.balloons()
 
@@ -179,6 +187,11 @@ def spotify_get_all_results(
     return pd.concat(retVal_list).reset_index(drop=True)
 
 
+# Helper function to unroll image data held in JSON.
+# Looks for an "images" column and creates a DataFrame linking that unrolled JSON with the "id" column value for that row.
+# Returns arg `df` with a `url` column added with an image link from the above described processing.
+# Args:
+# df: the DataFrame with the "images" column to unroll.
 def spotify_unroll_image_helper(df):
     my_image_size = 320
     df_imgs = convert_json_col_to_dataframe_with_key(
@@ -189,6 +202,7 @@ def spotify_unroll_image_helper(df):
 
     df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
 
+    # Drop the "height" column
     df_imgs.drop(height_str, axis=1, inplace=True)
 
     df_imgs = pd.merge(
@@ -198,15 +212,21 @@ def spotify_unroll_image_helper(df):
         on=id_str,
     )
 
+    # Fill NA URLs with a stock image
     df_imgs[url_str].fillna(
         "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
     )
 
+    # Drop the unrolled "images" column.
     df_imgs.drop(images_str, axis=1, inplace=True)
 
     return df_imgs
 
 
+# Generates HTML style code for images used in the app.
+# Args:
+# img_size_px: size in pixels for the image
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
 def generate_html_style_code(img_size_px, style_tag_suffix):
     return f"""
 <style>
@@ -257,6 +277,13 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
 </style>"""
 
 
+# Function to generate the div block that goes along with images in the app
+# Args:
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
+# img_src_holder_str: the image URL
+# strong_txt_holder_str: text for line 1 to the right of the image
+# p_txt_holder_str: text for line 2 to the right of the image
+# b_txt_holder_str: text to the left of the image
 def generate_div_block(
     style_tag_suffix,
     img_src_holder_str,
@@ -287,6 +314,14 @@ def generate_div_block(
     return div_start + div_num_container + div_main_containers
 
 
+# Utility function to generate the style and div blocks together.
+# Args:
+# img_size_px: size in pixels for the image
+# style_tag_suffix: a unique suffix to add to CSS classes so multiple styles with slight differences can be configured with the same function.
+# img_src_holder_str: the image URL
+# strong_txt_holder_str: text for line 1 to the right of the image
+# p_txt_holder_str: text for line 2 to the right of the image
+# b_txt_holder_str: text to the left of the image
 def generate_style_and_div_blocks(
     img_size_px,
     style_tag_suffix,
@@ -308,18 +343,24 @@ def generate_style_and_div_blocks(
     )
 
 
+# Where the real magic starts. Retrieves an access token and runs the rest of the app.
+# Args:
+# initial_oauth_token: the OAuth 2.0 token
+# client_id: Spotify client ID
+# client_secret: Spotify client secret
+# redirect_uri: OAuth 2.0 redirect uri
 def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     # Set up for the API call to retrieve an access token
     base64_encoding = "ascii"
-    content_type_dictionary = {"Content-Type": "application/x-www-form-urlencoded"}
 
     # Headers with Base64 auth encoding
     get_bearer_token_headers = {
         "Authorization": "Basic "
         + base64.b64encode(
             f"{client_id}:{client_secret}".encode(base64_encoding)
-        ).decode(base64_encoding)
-    } | content_type_dictionary
+        ).decode(base64_encoding),
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
 
     # Payload
     get_bearer_token_payload = {
@@ -343,6 +384,9 @@ def run_app(initial_oauth_token, client_id, client_secret, redirect_uri):
     run_app_contents(get_bearer_token_response_json["access_token"])
 
 
+# Pulls all the Spotify data and populates the Streamlit app
+# Args:
+# access_token: the access token needed to call the Spotify API
 def run_app_contents(access_token):
     # API call happens here
     my_tracks = spotify_get_all_results(
@@ -359,6 +403,7 @@ def run_app_contents(access_token):
 
     my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 
+    # Unroll artist data
     track_artists_df = convert_json_col_to_dataframe_with_key(
         my_tracks, track_id_str, artists_str
     )
@@ -387,8 +432,10 @@ def run_app_contents(access_token):
         )
     )
 
+    # Create the logout button
     st.link_button("Logout", "https://spotify.com/logout", type="primary")
 
+    # Some plotly code that did not make the cut because it made the UX of mobile scrolling worse:
     # my_px_color_theme = px.colors.sequential.Sunset
 
     # px_top_artists_by_track_count = px.bar(
@@ -411,6 +458,7 @@ def run_app_contents(access_token):
 
     # px_displaybarconfig = {"displayModeBar": False}
 
+    # The top DataFrame to display
     st.subheader("All Artists and Liked Track Counts")
     st.dataframe(
         num_tracks_per_artist[
@@ -434,21 +482,26 @@ def run_app_contents(access_token):
         hide_index=True,
     )
 
+    # Short, medium, and long term tracks section
+
+    # Convert the tuple to a list
     bcols = list(st.columns(3))
+
     term_str = "term"
     underscore_term_str = f"_{term_str}"
     term_timeframes_friendly = ["short", "medium", "long"]
     term_timeframes = [f"{x}{underscore_term_str}" for x in term_timeframes_friendly]
 
-    my_top_tracks_dataframes = []
-
+    # For each of short/medium/long term track API calls, populate a Streamlit column with the data visualizations.
     for bcol_index in range(len(bcols)):
         bcol = bcols[bcol_index]
         with bcol:
+            # Subheader
             st.subheader(
                 f"My {term_timeframes_friendly[bcol_index]}-{term_str} Top Tracks".title()
             )
 
+            # API Call
             my_top_tracks = spotify_get_all_results(
                 access_token,
                 f"{spotify_api_endpoint}me/top/tracks",
@@ -456,7 +509,11 @@ def run_app_contents(access_token):
                 query={"time_range": term_timeframes[bcol_index]},
             ).rename(columns={id_str: track_id_str, name_str: track_name_str})
 
+            # Wrap each value in a list to use the helper functions easily.
             my_top_tracks[album_str] = my_top_tracks[album_str].apply(lambda x: [x])
+
+            # First, unwrap the "album" JSON.
+            # Next, unwrap the album.images JSON
             my_top_tracks_album_images = convert_json_col_to_dataframe_with_key(
                 convert_json_col_to_dataframe_with_key(
                     my_top_tracks, track_id_str, album_str
@@ -465,8 +522,12 @@ def run_app_contents(access_token):
                 images_str,
             )
 
+            # My Top Tracks come back sorted, so add a rank to each one.
             my_top_tracks[track_rank_str] = range(1, len(my_top_tracks) + 1)
 
+            # Bring in artist information
+            # Tracks can have more than 1 artist, so flatten the artist_name column so each is seperated by a "; ".
+            # We do so to have 1 row per track.
             my_top_tracks_with_artist = (
                 pd.merge(
                     my_top_tracks[[track_id_str, track_rank_str, track_name_str]],
@@ -484,22 +545,23 @@ def run_app_contents(access_token):
                 ]
             )
 
+            # Link back to each 300 px height album image
             my_top_tracks_with_artist_and_album_img = pd.merge(
                 my_top_tracks_with_artist,
                 my_top_tracks_album_images[
                     my_top_tracks_album_images[height_str] == 300
-                ][[track_id_str, url_str]].reset_index()[[track_id_str, url_str]],
+                ][[track_id_str, url_str]].reset_index(),
                 on=track_id_str,
             )
 
+            # Add a column for the first artist, if multiple
             my_top_tracks_with_artist_and_album_img[
                 primary_artist_name_str
             ] = my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
                 ";.+", "", regex=True
             )
 
-            my_top_tracks_dataframes.append(my_top_tracks_with_artist_and_album_img)
-
+            # For each row, generate the frontend html/css code and write it
             for i, df_row in my_top_tracks_with_artist_and_album_img.iterrows():
                 st.markdown(
                     generate_style_and_div_blocks(
@@ -513,30 +575,13 @@ def run_app_contents(access_token):
                     unsafe_allow_html=True,
                 )
 
-    # top_tracks_bcols = list(st.columns(3))
-    # for top_track_bcol_index in range(len(top_tracks_bcols)):
-    #     top_track_bcol = top_tracks_bcols[top_track_bcol_index]
-    #     with top_track_bcol:
-    #         st.dataframe(
-    #             my_top_tracks_dataframes[top_track_bcol_index][
-    #                 [track_rank_str, track_name_str, primary_artist_name_str]
-    #             ].rename(
-    #                 columns={
-    #                     track_rank_str: rank_str.title(),
-    #                     track_name_str: "Track",
-    #                     primary_artist_name_str: artist_str,
-    #                 }
-    #             ),
-    #             use_container_width=True,
-    #             hide_index=True,
-    #         )
-
+    # Get unique artists whose tracks are liked
     artist_ids_to_query = num_tracks_per_artist[id_str].drop_duplicates()
     max_artists_per_section = 50
 
     # Convert the pandas Series to a list. The endpoint can only handle 50 artists at a time.
     # Calculate the number of pages and split. Formula: ceiling(number of rows divided by the page limit).
-    # Collapse the list of strings by a comma.
+    # Collapse each list of strings by a comma.
     artist_ids_to_query_list = [
         ",".join(x)
         for x in np.array_split(
@@ -545,6 +590,7 @@ def run_app_contents(access_token):
         )
     ]
 
+    # Call the API for all artists in the list
     my_artists_list = []
     for artist_id_query_string in artist_ids_to_query_list:
         my_artists_list.append(
@@ -557,6 +603,8 @@ def run_app_contents(access_token):
                 paginated=False,
             )
         )
+
+    # Union the results and bring in liked tracks metadata, also retaining image data
     my_liked_artists = pd.merge(
         pd.concat(my_artists_list).reset_index(drop=True)[[id_str, images_str]],
         num_tracks_per_artist,
@@ -564,8 +612,10 @@ def run_app_contents(access_token):
         how="inner",
     )
 
+    # Get image URL for each artist appended to the DataFrame
     my_liked_artists_imgs = spotify_unroll_image_helper(my_liked_artists)
 
+    # Call the API for followed artist data
     my_followed_artists = spotify_get_all_results(
         access_token,
         f"{spotify_api_endpoint}me/following",
@@ -574,8 +624,10 @@ def run_app_contents(access_token):
         base_obj="artists",
     )
 
+    # Get image URL for each artist appended to the DataFrame
     my_followed_artists_imgs = spotify_unroll_image_helper(my_followed_artists)
 
+    # Perform an outer join between liked and followed artists
     my_left = my_liked_artists_imgs
     my_right = my_followed_artists_imgs
 
@@ -595,25 +647,34 @@ def run_app_contents(access_token):
         indicator=True,
     )[my_left_cols + [name_y_str, url_y_str, merge_str]]
 
+    # Look for rows where an artist is followed with no liked songs.
+    # "name" would be NA but "name_y" would not be.
     unfollow_artist_rec_rows_to_retrieve = my_followed_and_liked_artists_df[
         name_str
     ].isna()
+
+    # Get the name and URL for those rows
     unfollow_artist_rec_replace_vals = my_followed_and_liked_artists_df.loc[
         unfollow_artist_rec_rows_to_retrieve, [name_y_str, url_y_str]
     ]
 
+    # Replace "name" and "url" columns with the retrieved values
     my_followed_and_liked_artists_df.loc[
         unfollow_artist_rec_rows_to_retrieve, [name_str, url_str]
     ] = unfollow_artist_rec_replace_vals.values
 
+    # Remove extraneous columns
     my_followed_and_liked_artists_df = my_followed_and_liked_artists_df[
         my_left_cols + [merge_str]
     ]
 
+    # Start to populate follow/unfollow recommendations
     followrecscol, unfollowrecscol = st.columns(2)
-    no_recs_str = "No recommendations. You are on top of things!"
+    no_recs_str = "No recommendations. You're on top of things!"
     recs_img_size = 200
 
+    # Get artists with a liked song count >= 8 that are not followed, and present them via the visualization function.
+    # If no recommendations, show a success message.
     with followrecscol:
         st.subheader("Recommended Artists to Follow")
         to_iter = my_followed_and_liked_artists_df[
@@ -636,6 +697,8 @@ def run_app_contents(access_token):
         else:
             st.success(no_recs_str)
 
+    # Get artists with no liked songs that are followed, and present them via the visualization function.
+    # If no recommendations, show a success message.
     with unfollowrecscol:
         st.subheader("Recommended Artists to Unfollow")
         to_iter = my_followed_and_liked_artists_df[
@@ -657,6 +720,11 @@ def run_app_contents(access_token):
             st.success(no_recs_str)
 
 
+# Generates a simple horizontalled centered div
+# Args:
+# html_element: the html component for inside the div
+# text: text to write
+# html_element_attr: attributes html syntax for the html_element
 def generate_centered_div(html_element, text, html_element_attr=None):
     html_element_start = html_element + (
         f" {html_element_attr}" if html_element_attr else ""
@@ -668,6 +736,11 @@ def generate_centered_div(html_element, text, html_element_attr=None):
 </div>"""
 
 
+# Streamlit wrapper to write a centered div
+# Args:
+# html_element: the html component for inside the div
+# text: text to write
+# html_element_attr: attributes html syntax for the html_element
 def st_write_centered_text(html_element, text, html_element_attr=None):
     st.markdown(
         generate_centered_div(html_element, text, html_element_attr),
@@ -675,18 +748,22 @@ def st_write_centered_text(html_element, text, html_element_attr=None):
     )
 
 
+# Get the query parameters of the URL in the browser
 query_params = st.experimental_get_query_params()
-code_str = "code"
 
+# Variable setup
+code_str = "code"
 scopes = "user-read-private user-read-email playlist-read-private user-follow-read user-top-read user-read-recently-played user-library-read"
 client_id_str = "client_id"
 client_secret_str = "client_secret"
 redirect_uri_str = "redirect_uri"
 
+# Read from local secrets (when locally run) file or app secrets (when running deployed version).
 client_id = st.secrets[client_id_str]
 client_secret = st.secrets[client_secret_str]
 redirect_uri = st.secrets[redirect_uri_str]
 
+# If there is no OAuth 2.0 code in the query parameters, generate the Welcome screen.
 if code_str not in query_params:
     oath_token_url = f"{spotify_accounts_endpoint}authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scopes}"
 
@@ -707,6 +784,7 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
     rounded_button_class_raw = "rounded-button"
     rounded_button_class = f".{rounded_button_class_raw}"
 
+    # Set some CSS and HTML to center the elements (not supported in Streamlit natively)
     st.markdown(
         f"""
 <style>
@@ -740,13 +818,16 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 """,
         unsafe_allow_html=True,
     )
+# If there is an OAuth 2.0 code in the query parameters, run the analysis.
 else:
+    # Grab your token
     oauth_initial_token = query_params[code_str][0]
 
-    # Does not rerun the page
+    # Removes the query parameters from the browser URL and does not rerun the page
     st.experimental_set_query_params()
 
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
 
+    # Run the analysis!
     run_app(oauth_initial_token, client_id, client_secret, redirect_uri)
