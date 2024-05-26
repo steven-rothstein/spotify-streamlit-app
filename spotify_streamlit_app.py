@@ -502,12 +502,16 @@ def run_app_contents(access_token):
             )
 
             # API Call
-            my_top_tracks = spotify_get_all_results(
-                access_token,
-                f"{spotify_api_endpoint}me/top/tracks",
-                "application/json",
-                query={"time_range": term_timeframes[bcol_index]},
-            ).rename(columns={id_str: track_id_str, name_str: track_name_str})
+            my_top_tracks = (
+                spotify_get_all_results(
+                    access_token,
+                    f"{spotify_api_endpoint}me/top/tracks",
+                    "application/json",
+                    query={"time_range": term_timeframes[bcol_index]},
+                )
+                .rename(columns={id_str: track_id_str, name_str: track_name_str})
+                .head(50)
+            )
 
             # Wrap each value in a list to use the helper functions easily.
             my_top_tracks[album_str] = my_top_tracks[album_str].apply(lambda x: [x])
@@ -555,10 +559,10 @@ def run_app_contents(access_token):
             )
 
             # Add a column for the first artist, if multiple
-            my_top_tracks_with_artist_and_album_img[
-                primary_artist_name_str
-            ] = my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
-                ";.+", "", regex=True
+            my_top_tracks_with_artist_and_album_img[primary_artist_name_str] = (
+                my_top_tracks_with_artist_and_album_img[artist_name_str].str.replace(
+                    ";.+", "", regex=True
+                )
             )
 
             # For each row, generate the frontend html/css code and write it
