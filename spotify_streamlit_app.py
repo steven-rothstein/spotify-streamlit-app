@@ -203,7 +203,7 @@ def spotify_unroll_image_helper(df):
     df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
 
     # Drop the "height" column
-    df_imgs.drop(height_str, axis=1, inplace=True)
+    df_imgs = df_imgs.drop(height_str, axis=1)
 
     df_imgs = pd.merge(
         df,
@@ -213,12 +213,12 @@ def spotify_unroll_image_helper(df):
     )
 
     # Fill NA URLs with a stock image
-    df_imgs[url_str].fillna(
-        "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
+    df_imgs[url_str] = df_imgs[url_str].fillna(
+        "https://www.freeiconspng.com/uploads/no-image-icon-15.png"
     )
 
     # Drop the unrolled "images" column.
-    df_imgs.drop(images_str, axis=1, inplace=True)
+    df_imgs = df_imgs.drop(images_str, axis=1)
 
     return df_imgs
 
@@ -265,6 +265,7 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
         display: flex;
         flex-direction: column;
         text-align: left;
+        /*font-size: 12px;*/
     }}
 
     .text-container-{style_tag_suffix} p {{
@@ -273,6 +274,7 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
 
     .text-subheader-{style_tag_suffix} {{
         color: grey;
+        /*font-size: 12px;*/
     }}
 </style>"""
 
@@ -399,7 +401,7 @@ def run_app_contents(access_token):
 
     # Header and column cleanup
     my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
-    my_tracks.rename(columns={id_str: track_id_str}, inplace=True)
+    my_tracks = my_tracks.rename(columns={id_str: track_id_str})
 
     my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 
@@ -753,7 +755,7 @@ def st_write_centered_text(html_element, text, html_element_attr=None):
 
 
 # Get the query parameters of the URL in the browser
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 
 # Variable setup
 code_str = "code"
@@ -825,10 +827,10 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 # If there is an OAuth 2.0 code in the query parameters, run the analysis.
 else:
     # Grab your token
-    oauth_initial_token = query_params[code_str][0]
+    oauth_initial_token = query_params[code_str]
 
     # Removes the query parameters from the browser URL and does not rerun the page
-    st.experimental_set_query_params()
+    st.query_params.clear()
 
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
