@@ -265,6 +265,7 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
         display: flex;
         flex-direction: column;
         text-align: left;
+        /*font-size: 12px;*/
     }}
 
     .text-container-{style_tag_suffix} p {{
@@ -273,6 +274,7 @@ def generate_html_style_code(img_size_px, style_tag_suffix):
 
     .text-subheader-{style_tag_suffix} {{
         color: grey;
+        /*font-size: 12px;*/
     }}
 </style>"""
 
