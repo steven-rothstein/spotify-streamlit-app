@@ -753,7 +753,7 @@ def st_write_centered_text(html_element, text, html_element_attr=None):
 
 
 # Get the query parameters of the URL in the browser
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 
 # Variable setup
 code_str = "code"
@@ -825,10 +825,10 @@ Now, let's get you signed in. Clicking the link at the bottom of this page will 
 # If there is an OAuth 2.0 code in the query parameters, run the analysis.
 else:
     # Grab your token
-    oauth_initial_token = query_params[code_str][0]
+    oauth_initial_token = query_params[code_str]
 
     # Removes the query parameters from the browser URL and does not rerun the page
-    st.experimental_set_query_params()
+    st.query_params.clear()
 
     # Set the default layout for the frontend
     st.set_page_config(layout="wide")
