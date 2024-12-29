@@ -203,7 +203,7 @@ def spotify_unroll_image_helper(df):
     df_imgs = df_imgs[df_imgs[height_str] == my_image_size]
 
     # Drop the "height" column
-    df_imgs.drop(height_str, axis=1, inplace=True)
+    df_imgs = df_imgs.drop(height_str, axis=1)
 
     df_imgs = pd.merge(
         df,
@@ -213,12 +213,12 @@ def spotify_unroll_image_helper(df):
     )
 
     # Fill NA URLs with a stock image
-    df_imgs[url_str].fillna(
-        "https://www.freeiconspng.com/uploads/no-image-icon-15.png", inplace=True
+    df_imgs[url_str] = df_imgs[url_str].fillna(
+        "https://www.freeiconspng.com/uploads/no-image-icon-15.png"
     )
 
     # Drop the unrolled "images" column.
-    df_imgs.drop(images_str, axis=1, inplace=True)
+    df_imgs = df_imgs.drop(images_str, axis=1)
 
     return df_imgs
 
@@ -399,7 +399,7 @@ def run_app_contents(access_token):
 
     # Header and column cleanup
     my_tracks.columns = my_tracks.columns.str.replace(f"{track_str}.", "", regex=False)
-    my_tracks.rename(columns={id_str: track_id_str}, inplace=True)
+    my_tracks = my_tracks.rename(columns={id_str: track_id_str})
 
     my_tracks[added_at_str] = pd.to_datetime(my_tracks[added_at_str])
 
